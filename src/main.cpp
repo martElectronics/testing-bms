@@ -113,6 +113,7 @@ void loop()
   CAN.setPacket(canIdCMDCharger,canDataCMDBMSCharger);
 
   CAN.printByteArray(dataPR,8);
+  digitalWrite(pinSDC,true);
 
   //CAN.send();
   
