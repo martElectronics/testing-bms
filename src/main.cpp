@@ -5,7 +5,7 @@
 #include "timer.h"
 
 //Objects
-CAN_BUS CAN(5,1,250);
+CAN_BUS CAN(5,1,500);
 
 //pins
 int pinSDC=13,pinDetectCharger=25;
@@ -91,11 +91,13 @@ void setup()
 
 void loop()
 {
+  byte dataPR[8];
   bool stsDetectCharger=!digitalRead(pinDetectCharger);
   stsDetectChargerEdge.detectRisingEdge(stsDetectCharger);
 
   CAN.receive();
   CAN.getPacket(canIdCMDCarroBMS,canDataCMDCarroBMS);
+   CAN.getPacket(10,dataPR);
   bool stsBot=(canDataCMDCarroBMS[0]==1);
 
   if(currentSatus==statusCharging)   canDataSTSBMS[0]=1;
@@ -109,6 +111,8 @@ void loop()
 
   CAN.setPacket(canIdSTSBMS,canDataSTSBMS);
   CAN.setPacket(canIdCMDCharger,canDataCMDBMSCharger);
+
+  CAN.printByteArray(dataPR,8);
 
   CAN.send();
   
