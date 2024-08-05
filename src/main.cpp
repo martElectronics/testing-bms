@@ -5,7 +5,7 @@
 #include "timer.h"
 
 //Objects
-CAN_BUS CAN(5,1,1000);
+CAN_BUS CAN(5,1,250);
 
 //pins
 int pinSDC=13,pinDetectCharger=25;
@@ -13,6 +13,7 @@ int pinSDC=13,pinDetectCharger=25;
 //control
 bool v;
 bool cmdOpenSDC,cmdStartCharge;
+int a;
 
 //***cfg ACU
 float cfgMAXVoltageCell=4.1;
