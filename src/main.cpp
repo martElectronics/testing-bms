@@ -83,8 +83,8 @@ void setup()
   pinMode(pinSDC, OUTPUT);
   pinMode(pinDetectCharger,INPUT_PULLDOWN);
 
-  configBMS();
-  configCharger(cfgChargerVoltageMAX,cfgChargerCurrentMAX);
+  //configBMS();
+  //configCharger(cfgChargerVoltageMAX,cfgChargerCurrentMAX);
 
  
 }
