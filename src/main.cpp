@@ -114,7 +114,7 @@ void loop()
 
   CAN.printByteArray(dataPR,8);
 
-  CAN.send();
+  //CAN.send();
   
 }
 
