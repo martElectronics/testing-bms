@@ -79,7 +79,7 @@ void configCharger(int maxVolt,int maxCurrent)
 
 void setup()
 {
-  
+  Serial.begin(115200);
   pinMode(pinSDC, OUTPUT);
   pinMode(pinDetectCharger,INPUT_PULLDOWN);
 
