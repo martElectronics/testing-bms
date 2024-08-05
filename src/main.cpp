@@ -107,7 +107,7 @@ void loop()
   if(cmdStartCharge)   canDataCMDBMSCharger[4]=0;
   else canDataCMDBMSCharger[4]=1;
 
-  handleStatus(currentSatus,stsBot,stsBot,20,3.5,3);
+  //handleStatus(currentSatus,stsBot,stsBot,20,3.5,3);
 
   CAN.setPacket(canIdSTSBMS,canDataSTSBMS);
   CAN.setPacket(canIdCMDCharger,canDataCMDBMSCharger);
