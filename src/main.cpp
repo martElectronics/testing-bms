@@ -2,7 +2,67 @@
 //#include <BQ79606.h>
 #include "BQ79606.h"
 
+void getUARTStatus(byte status[], byte speed[]) {
+    byte bFrame; 
 
+    for (int nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
+        ReadReg(nCurrentBoard, COMM_STAT, &bFrame, 1, 0, FRMWRT_SGL_R);
+        delayMicroseconds(500);
+        status[nCurrentBoard] = bFrame;
+		speed[nCurrentBoard] = bFrame & 0x03; //Últimos dos bit del registro que indican el baudrate
+    }
+}
+
+bool checkBitsInRange(byte data[], int size, int a, int b, int condition) {
+    // Validate the input range
+    if (a < 0 || b > 7 || a > b) {
+        Serial.println("Invalid bit range!");
+        return false; // Invalid range
+    }
+
+    // Create a mask for the bit range from a to b
+    int mask = 0;
+    for (int i = a; i <= b; i++) {
+        mask |= (1 << i); // Set the bits in the mask
+    }
+
+    // Shift the condition to align with the mask
+    int shiftedCondition = condition << a;
+
+    // Print the array content for debugging
+    Serial.println("Array content:");
+    for (int i = 0; i < size; i++) {
+        Serial.print("data[");
+        Serial.print(i);
+        Serial.print("] = ");
+        Serial.println(data[i], BIN); // Print in binary format
+    }
+
+    // Check each byte in the array
+    for (int i = 0; i < size; i++) {
+        // Extract the bits in the range using the mask
+        int bitsInRange = data[i] & mask;
+
+        // Print the extracted bits for debugging
+        Serial.print("data[");
+        Serial.print(i);
+        Serial.print("] bits [");
+        Serial.print(a);
+        Serial.print(":");
+        Serial.print(b);
+        Serial.print("] = ");
+        Serial.println(bitsInRange, BIN);
+
+        // Compare the extracted bits with the shifted condition
+        if (bitsInRange != shiftedCondition) {
+            Serial.println("Condition not met!");
+            return false; // Bits do not match the condition
+        }
+    }
+
+    Serial.println("All bytes match");
+    return true; // All bytes match the condition
+}
 
 void setup() {
 
@@ -25,11 +85,8 @@ void setup() {
     memset(response_frame2, 0, sizeof(response_frame2));
     ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
 		Serial.print((String)"Board "+nCurrentBoard+"= ");
-
     Serial.print(response_frame2[4]);
-
 		Serial.println(".");
-
 		delay(10);
 
 	}
@@ -60,7 +117,14 @@ void setup() {
 
   delay(3*TOTALBOARDS+901);                             //3us of re-clocking delay per board + 901us waiting for first ADC conversion to complete
   
-  
+  //Mostrar info BMS : Velocidad UART
+  byte status[TOTALBOARDS], speed[TOTALBOARDS];
+  getUARTStatus(status,speed);
+  for (int i=0;i<TOTALBOARDS;i++)
+  {
+    Serial.print((String)speed[i]+" ");
+  }
+
 //Serial2.println("OK");*/
 }
 
@@ -77,15 +141,9 @@ void loop() {
         memset(response_frame, 0, sizeof(response_frame));
         i = 0;
         currentBoard=0;
-
-        
-
         WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);
 
         delay(2000);
-
-        
-
         /*
          * ***********************************************
          * NOTE: SOME COMPUTERS HAVE ISSUES TRANSMITTING
@@ -101,7 +159,6 @@ void loop() {
         }
         else{
 
-        
           //PARSE, FORMAT, AND PRINT THE DATA
           for(currentBoard = 0; currentBoard<TOTALBOARDS; currentBoard++)
           {   
@@ -135,7 +192,6 @@ void loop() {
                 //and it's +1 because cell names start with "Cell1"
                 Serial.println((String)"Cell " +(i/2)+" voltage= " +cellVoltage);
               }
-
 
               //go through each byte in the current board (12 bytes = 6 GPIO * 2 bytes each)
               for(i=0; i<12; i+=2)
