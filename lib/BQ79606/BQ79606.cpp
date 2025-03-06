@@ -1,11 +1,16 @@
 #include "BQ79606.h"
+#ifdef ESP32
 #include <HardwareSerial.h>
+HardwareSerial BMS_UART(2); // Use HardwareSerial for ESP32
+#else
+#define BMS_UART Serial3 // Use Serial1 for Arduino Mega
+#endif
 
 //hw_timer_t *Reciving_Timeout = NULL;
 bool UART_RX_RDY = 0;
 extern int RTI_TIMEOUT;
 int bRes = 0;
-int count = 10000;
+int32_t count = 10000;
 bool UART_Timeout = false;
 uint8_t pFrame[(MAXBYTES+6)*TOTALBOARDS];
 byte bBuf[8];
@@ -14,7 +19,6 @@ byte response_frame2[(MAXBYTES+6)*TOTALBOARDS];
 byte bFrame[(2+6)*TOTALBOARDS];
 uint8_t nCurrentBoard = 0;
 
-HardwareSerial	BMS_UART(2); // definir un Serial para UART1
 
 const int MySerialRX = BMS_RX;
 const int MySerialTX = BMS_TX;
@@ -44,9 +48,15 @@ void Ini_ESP(){
 	//Fault pin Inicialization
 	pinMode(Fault_pin, INPUT);
 
+	#ifdef ESP32
+  BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX); // Initialize HardwareSerial for ESP32
+  #else
+  BMS_UART.begin(BAUDRATE); // Initialize Serial1 for Arduino Mega
+  #endif
+
     //UART inicilization
     Serial.begin(115200);
-	BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
+
 	
 
 	//UART reciving TimeOut timer
@@ -98,7 +108,7 @@ void CommSleepToWake(void) {
 
 
 //Communication Reset
-void CommReset(int BAUD) {
+void CommReset(uint32_t BAUD) {
     BMS_UART.end();             //Comunication end
 	pinMode(BMS_TX,OUTPUT);     //RX pin is an output
     digitalWrite(BMS_TX,0);     //RX to low
@@ -374,8 +384,6 @@ int WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteTyp
 int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOut, byte bWriteType) {
 	bRes = 0;
 	count = 100000;
-	int recepciones = 0;
-	byte recibido [64];
 	int Reciving_Len = 0;
 
 	if(bWriteType == FRMWRT_SGL_R){
@@ -396,7 +404,7 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
 		if(ReadFrameReq(bID, wAddr, bLen, bWriteType) == 0){
 			Serial.println("No se pueden leer mas de 128 bytes");
 		};	
-		memset(pData, 0, sizeof(pData));			//pData = empty
+		memset(pData, 0, sizeof(*pData));			//pData = empty
 		//timerStart(Reciving_Timeout);				//Timer timeout start
 
 		int Time = 0;

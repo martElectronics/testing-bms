@@ -1,8 +1,9 @@
 #include <Arduino.h>
 // #include <BQ79606.h>
 #include "BQ79606.h"
+#define TIME_BETWEEN_READINGS 2000
 
-bool cfgShowBMSVoltages = false, cfgShowRXInfo=true;
+bool cfgShowBMSVoltages = true, cfgShowRXInfo=false;
 int numRXErrorFrames=0, numRXTotalFrames=0;
 
 void getUARTStatus(byte status[], byte speed[])
@@ -154,7 +155,7 @@ void loop()
   currentBoard = 0;
   WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);
 
-  delay(2000);
+  delay(TIME_BETWEEN_READINGS);
   /*
    * ***********************************************
    * NOTE: SOME COMPUTERS HAVE ISSUES TRANSMITTING
