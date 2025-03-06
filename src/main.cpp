@@ -21,7 +21,7 @@ void setup() {
   byte response_frame[(MAXBYTES+6)];
   byte response_frame2[(MAXBYTES+6)];
     
-	for (nCurrentBoard = 0; nCurrentBoard < 24; nCurrentBoard++) {
+	for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
     memset(response_frame2, 0, sizeof(response_frame2));
     ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
 		Serial.print((String)"Board "+nCurrentBoard+"= ");
