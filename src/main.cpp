@@ -7,13 +7,9 @@
 void setup() {
 
   Ini_ESP();
-
   Wake79606();
-
   CommReset(BAUDRATE);
-
   AutoAddress();
-
   Serial.print("Addres: ");
 	delay(10);
 
@@ -25,11 +21,8 @@ void setup() {
     memset(response_frame2, 0, sizeof(response_frame2));
     ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
 		Serial.print((String)"Board "+nCurrentBoard+"= ");
-
     Serial.print(response_frame2[4]);
-
 		Serial.println(".");
-
 		delay(10);
 
 	}
@@ -54,9 +47,7 @@ void setup() {
   WriteReg(0, AUX_ADC_CTRL1, 0xF0, 1, FRMWRT_ALL_NR);       //GPIO is an input
   WriteReg(0, AUX_ADC_CTRL2, 0x03, 1, FRMWRT_ALL_NR);       //GPIO is an input
 
-
   WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);          //CELL_ADC_GO = 1 Y tsref y AUX_ADC_GO = 1
-
 
   delay(3*TOTALBOARDS+901);                             //3us of re-clocking delay per board + 901us waiting for first ADC conversion to complete
   
@@ -76,16 +67,9 @@ void loop() {
     //reset variables
         memset(response_frame, 0, sizeof(response_frame));
         i = 0;
-        currentBoard=0;
-
-        
-
+        currentBoard=0; 
         WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);
-
         delay(2000);
-
-        
-
         /*
          * ***********************************************
          * NOTE: SOME COMPUTERS HAVE ISSUES TRANSMITTING
@@ -100,7 +84,6 @@ void loop() {
           //delay(1000);
         }
         else{
-
         
           //PARSE, FORMAT, AND PRINT THE DATA
           for(currentBoard = 0; currentBoard<TOTALBOARDS; currentBoard++)
@@ -118,14 +101,10 @@ void loop() {
               {
                 //each board responds with 32 data bytes + 6 header bytes
                 //so need to find the start of each board by doing that * currentBoard
-
-
                 //convert the two individual bytes of each cell into a single 16 bit data item (by bit shifting)
                 uint16_t rawData = (response_frame[i+4] << 8) | response_frame[i+5];
-
                 //do the two's complement of the resultant 16 bit data item, and multiply by 190.73uV to get an actual voltage
                 float cellVoltage = Complement(rawData,0.00019073);
-                
                 if(cellVoltage >= 4.2){
                   digitalWrite(BMS_OK, LOW);
                   Serial.println("Fallo de tensión");
@@ -141,13 +120,10 @@ void loop() {
               for(i=0; i<12; i+=2)
               {
                 //each board responds with 32 data bytes + 6 header bytes
-
                 //convert the two individual bytes of each cell into a single 16 bit data item (by bit shifting)
                 uint16_t rawData = (response_frame2[i+4] << 8) | response_frame2[i+5];
-
                 //do the two's complement of the resultant 16 bit data item, and multiply by 190.73uV to get an actual voltage
                 float GPIOVoltage = Complement(rawData,0.00019073);
-
                 //print the voltages - it is i/2 because cells start from 1 up to 6
                 //and there are 2 bytes per cell (i value is twice the cell number),
                 //and it's +1 because cell names start with "Cell1"
