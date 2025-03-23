@@ -1,11 +1,220 @@
 #include <Arduino.h>
-//#include <BQ79606.h>
 #include "BQ79606.h"
 
-void printVoltages();
+// Function prototypes
+void setupBMS();
+void readVoltages();
+void processCommand(char* command);
+void printParams(byte bID, uint16_t wAddr, byte bLen, uint32_t dwTimeOut, byte bWriteType);
+void printReadResult(byte* pData, byte bLen);
+uint64_t parseHexUint64(const char* str);
+
+// Buffer for incoming serial data
+const int MAX_INPUT_LENGTH = 64;
+char inputBuffer[MAX_INPUT_LENGTH];
+int inputIndex = 0;
+
+// Buffer for read data
+const int MAX_DATA_LENGTH = 32;
+byte dataBuffer[MAX_DATA_LENGTH];
 
 void setup() {
+  //Serial.begin(115200);  // Start serial communication at 115200 baud
+  setupBMS();
+  Serial.println("BQ79606 Register Reader Ready");
+  Serial.println("Format: READ,ID,ADDRESS,LENGTH,TIMEOUT,TYPE");
+  Serial.println("Example: READ,0x01,0x2000,8,1000,1");
+}
 
+void loop() {
+  // Check if data is available to read from serial
+  if (Serial.available() > 0) {
+    char inChar = Serial.read();
+    
+    // Add character to buffer if not end of line
+    if (inChar != '\n' && inputIndex < MAX_INPUT_LENGTH - 1) {
+      inputBuffer[inputIndex] = inChar;
+      inputIndex++;
+    }
+    // Process the command when line end is received
+    else {
+      inputBuffer[inputIndex] = '\0';  // Null-terminate the string
+      processCommand(inputBuffer);
+      inputIndex = 0;  // Reset buffer index
+    }
+  }
+
+}
+
+// Custom function to parse 64-bit hex values
+uint64_t parseHexUint64(const char* str) {
+  uint64_t result = 0;
+  
+  // Skip "0x" prefix if present
+  if (str[0] == '0' && (str[1] == 'x' || str[1] == 'X')) {
+    str += 2;
+  }
+  
+  // Parse hex digits
+  while (*str) {
+    char c = *str++;
+    result <<= 4; // Shift left by 4 bits (multiply by 16)
+    
+    if (c >= '0' && c <= '9') {
+      result |= (c - '0');
+    } else if (c >= 'a' && c <= 'f') {
+      result |= (c - 'a' + 10);
+    } else if (c >= 'A' && c <= 'F') {
+      result |= (c - 'A' + 10);
+    } else {
+      // Invalid character
+      break;
+    }
+  }
+  
+  return result;
+}
+
+void processCommand(char* command) {
+  // Check if this is a READ command
+  if (strncmp(command, "READ,", 5) == 0) {
+    // Process read command
+    char* readCommand = command + 5; // Skip "READ,"
+    
+    byte bID;
+    uint16_t wAddr;
+    byte bLen;
+    uint32_t dwTimeOut;
+    byte bWriteType;
+    
+    // Parse command string to extract parameters
+    // Format expected: READ,ID,ADDRESS,LENGTH,TIMEOUT,TYPE
+    
+    char* token = strtok(readCommand, ",");
+    int paramCount = 0;
+    
+    while (token != NULL && paramCount < 5) {
+      switch (paramCount) {
+        case 0: // ID
+          bID = (byte)strtoul(token, NULL, 0);
+          break;
+        case 1: // Address
+          wAddr = (uint16_t)strtoul(token, NULL, 0);
+          break;
+        case 2: // Length
+          bLen = (byte)strtoul(token, NULL, 0);
+          if (bLen > MAX_DATA_LENGTH) {
+            Serial.print("ERROR: Length too large. Maximum is ");
+            Serial.println(MAX_DATA_LENGTH);
+            return;
+          }
+          break;
+        case 3: // Timeout
+          dwTimeOut = (uint32_t)strtoul(token, NULL, 0);
+          break;
+        case 4: // Write Type
+          bWriteType = (byte)strtoul(token, NULL, 0);
+          break;
+      }
+      
+      token = strtok(NULL, ",");
+      paramCount++;
+    }
+    
+    // Check if we got all 5 parameters
+    if (paramCount != 5) {
+      Serial.println("ERROR: Invalid number of parameters");
+      Serial.println("Format: READ,ID,ADDRESS,LENGTH,TIMEOUT,TYPE");
+      return;
+    }
+    
+    // Debug print the parsed values
+    printParams(bID, wAddr, bLen, dwTimeOut, bWriteType);
+    
+    // Clear the data buffer first
+    memset(dataBuffer, 0, MAX_DATA_LENGTH);
+    
+    // Call ReadReg with the parsed parameters
+    int result = ReadReg(bID, wAddr, dataBuffer, bLen, dwTimeOut, bWriteType);
+    Serial.print("ReadReg Result: ");
+    Serial.println(result);
+    
+    if (result > 0) {  // Assuming 0 means success
+      printReadResult(dataBuffer, bLen);
+    }
+    else
+    {
+      Serial.println("NO INFO READ");
+    }
+  }
+  else {
+    Serial.println("Unknown command. Use READ,ID,ADDRESS,LENGTH,TIMEOUT,TYPE");
+  }
+}
+
+void printParams(byte bID, uint16_t wAddr, byte bLen, uint32_t dwTimeOut, byte bWriteType) {
+  Serial.println("Parsed Parameters:");
+  
+  Serial.print("ID (hex): 0x");
+  if (bID < 0x10) Serial.print("0");
+  Serial.println(bID, HEX);
+  
+  Serial.print("Address (hex): 0x");
+  if (wAddr < 0x1000) Serial.print("0");
+  if (wAddr < 0x100) Serial.print("0");
+  if (wAddr < 0x10) Serial.print("0");
+  Serial.println(wAddr, HEX);
+  
+  Serial.print("Length: ");
+  Serial.println(bLen);
+  
+  Serial.print("Timeout (ms): ");
+  Serial.println(dwTimeOut);
+  
+  Serial.print("Write Type: ");
+  Serial.println(bWriteType);
+  Serial.println();
+}
+
+void printReadResult(byte* pData, byte bLen) {
+  Serial.println("Read Data (hex):");
+  
+  for (int i = 0; i < bLen; i++) {
+    if (pData[i] < 0x10) Serial.print("0");
+    Serial.print(pData[i], HEX);
+    Serial.print(" ");
+    
+    // Add a newline every 8 bytes for readability
+    if ((i + 1) % 8 == 0 || i == bLen - 1) {
+      Serial.println();
+    }
+  }
+  
+  // Show as a single hex value if length is 2, 4, or 8 bytes
+  if (bLen == 2 || bLen == 4 || bLen == 8) {
+    uint64_t value = 0;
+    for (int i = 0; i < bLen; i++) {
+      value = (value << 8) | pData[i];
+    }
+    
+    Serial.print("Value as ");
+    Serial.print(bLen * 8);
+    Serial.print("-bit hex: 0x");
+    
+    // Print in groups of 4 hex digits (16 bits)
+    for (int i = bLen / 2 - 1; i >= 0; i--) {
+      uint16_t chunk = (value >> (i * 16)) & 0xFFFF;
+      if (chunk < 0x1000) Serial.print("0");
+      if (chunk < 0x100) Serial.print("0");
+      if (chunk < 0x10) Serial.print("0");
+      Serial.print(chunk, HEX);
+    }
+    Serial.println();
+  }
+}
+
+void setupBMS()
+{
   Ini_ESP();
   Wake79606();
   CommReset(BAUDRATE);
@@ -55,12 +264,6 @@ void setup() {
 //Serial2.println("OK");*/
 }
 
-void loop() {
-   
-
-}
-
-
 void printVoltages()
 {
   delay(10);
@@ -98,7 +301,7 @@ void printVoltages()
             memset(response_frame, 0, sizeof(response_frame));
             memset(response_frame2, 0, sizeof(response_frame));
             //read back data (6 cells and 2 bytes each cell)
-            Bytesleidos = ReadReg(currentBoard, VCELL1H, response_frame, MAXBYTES, 0, FRMWRT_SGL_R);
+            Bytesleidos = ReadReg(currentBoard, VCELL1H, response_frame, MAXBYTES, 0, FRMWRT_SGL_R); //0,0x0215,12,0,0
             Bytesleidos = ReadReg(currentBoard, AUX_GPIO1H, response_frame2, MAXBYTES, 0, FRMWRT_SGL_R);
             //response frame actually starts with top of stack, so currentBoard is actually inverted from what it should be
             Serial.println((String)"Num board= "+currentBoard);
