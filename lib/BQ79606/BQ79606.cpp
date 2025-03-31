@@ -14,7 +14,7 @@ byte response_frame2[(MAXBYTES+6)*TOTALBOARDS];
 byte bFrame[(2+6)*TOTALBOARDS];
 uint8_t nCurrentBoard = 0;
 
-//HardwareSerial	Serial1(2); // definir un Serial para UART1
+//HardwareSerial	Serial2(2); // definir un Serial para UART1
 
 const int MySerialRX = BMS_RX;
 const int MySerialTX = BMS_TX;
@@ -46,7 +46,7 @@ void Ini_ESP(){
 
     //UART inicilization
     Serial.begin(115200);
-	Serial1.begin(BAUDRATE);
+	Serial2.begin(BAUDRATE);
 	
 
 	//UART reciving TimeOut timer
@@ -73,7 +73,7 @@ void Wake79606() {
 
 //Communication Clear
 void CommClear(void){
-    Serial1.end();             //Comunication end
+    Serial2.end();             //Comunication end
     pinMode(BMS_TX,OUTPUT);     //RX pin is an output
     digitalWrite(BMS_TX,0);     //RX to low
 
@@ -84,13 +84,13 @@ void CommClear(void){
 
 //Device go to sleep to active state
 void CommSleepToWake(void) {
-    Serial1.end();             //Comunication end
+    Serial2.end();             //Comunication end
     pinMode(BMS_TX,OUTPUT);     //RX pin is an output
     digitalWrite(BMS_TX,0);     //RX to low
 
 	delayMicroseconds(260);     // 250us to 300us, same as wake
 
-    Serial1.begin(BAUDRATE, SERIAL_8N1);   //UART inicilization
+    Serial2.begin(BAUDRATE, SERIAL_8N1);   //UART inicilization
     
     delayMicroseconds(170*TOTALBOARDS);     //tSU(SLPtoACT) transition time from sleep to active - 170us from wake receive to wake propagate for each device
 }
@@ -99,13 +99,13 @@ void CommSleepToWake(void) {
 
 //Communication Reset
 void CommReset(int32_t BAUD) {
-    Serial1.end();             //Comunication end
+    Serial2.end();             //Comunication end
 	pinMode(BMS_TX,OUTPUT);     //RX pin is an output
     digitalWrite(BMS_TX,0);     //RX to low
 	delayMicroseconds(500);     // should cover any possible baud rate
 	digitalWrite(BMS_TX,1);     //RX to High
 
-    Serial1.begin(250000, SERIAL_8N1);   //UART inicilization at 250000 Mbs
+    Serial2.begin(250000, SERIAL_8N1);   //UART inicilization at 250000 Mbs
 
     //tell the base device to set its baudrate to the chosen BAUDRATE, and propagate to the rest of the stack
     //then set the microcontroller to the appropriate baudrate to match
@@ -115,7 +115,7 @@ void CommReset(int32_t BAUD) {
 		delayMicroseconds(500);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        Serial1.begin(BAUD, SERIAL_8N1);   //UART inicilization at 1M baudrate
+        Serial2.begin(BAUD, SERIAL_8N1);   //UART inicilization at 1M baudrate
     }
     else if(BAUD == 500000)
     {   
@@ -123,7 +123,7 @@ void CommReset(int32_t BAUD) {
 		delayMicroseconds(250);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        Serial1.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
+        Serial2.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
     }
     else if(BAUD == 250000)
     {
@@ -131,7 +131,7 @@ void CommReset(int32_t BAUD) {
 		delayMicroseconds(250);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        Serial1.begin(BAUD, SERIAL_8N1);   //UART inicilization at 250k baudrate
+        Serial2.begin(BAUD, SERIAL_8N1);   //UART inicilization at 250k baudrate
     }
     else if(BAUD == 125000)
     {
@@ -139,14 +139,14 @@ void CommReset(int32_t BAUD) {
 		delayMicroseconds(250);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        Serial1.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
+        Serial2.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
     }
     else
     {
         printf("ERROR: INVALID BAUDRATE CHOSEN IN BQ79606.h FILE. Choosing default 1M baudrate:\n\n");
         WriteReg(0, COMM_CTRL, 0x3C3C, 2, FRMWRT_ALL_NR);
 		delayMicroseconds(250);
-        Serial1.begin(1000000, SERIAL_8N1);   //UART inicilization at 1M baudrate
+        Serial2.begin(1000000, SERIAL_8N1);   //UART inicilization at 1M baudrate
     }
 
     delayMicroseconds(100);
@@ -363,7 +363,7 @@ int WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteTyp
 	bPktLen += 2;
 	//THIS SEEMS to occasionally drop bytes from the frame. Sometimes is not sending the last frame of the CRC.
 	//(Seems to be caused by stack overflow, so take precautions to reduce stack usage in function calls)
-	Serial1.write(pFrame, bPktLen);
+	Serial2.write(pFrame, bPktLen);
 
 	return bPktLen;
 }
@@ -401,7 +401,7 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
 
 		int Time = 0;
 		//Waiting firts byte, If not reciving the first byte in 1 second send and error
-		while((Serial1.available() == 0) && (Time < 10)){
+		while((Serial2.available() == 0) && (Time < 10)){
 			delay(5);
 			Time ++;
 			if(Time == 10){
@@ -416,9 +416,9 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
 			
 
 		//Data avalible, start to read all data
-		if(Serial1.available() > 0){
+		if(Serial2.available() > 0){
 
-			bRes = Serial1.readBytes(pData, Reciving_Len);
+			bRes = Serial2.readBytes(pData, Reciving_Len);
 
 		}
 	}
