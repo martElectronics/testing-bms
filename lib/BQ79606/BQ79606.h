@@ -5,7 +5,7 @@
 
 
 // User defines
-#define TOTALBOARDS 24    //MUST SET: total boards in the stack
+#define TOTALBOARDS 2    //MUST SET: total boards in the stack
 #define BAUDRATE  250000    //set global baudrate
 #define MAXBYTES  6*2        //6 CELLS, 2 byteS EACH
 #define Wake_pin  4         //Wake up pin number in ESP32
