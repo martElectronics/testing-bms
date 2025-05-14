@@ -5,12 +5,21 @@
 
 
 void setup() {
+  delay(5000);
 
   Ini_ESP();
 
   Wake79606();
 
   CommReset(BAUDRATE);
+
+  uint8_t scratch[2];
+// read COMM_CTRL
+ReadReg(0,  COMM_CTRL,    scratch,    1, 0, FRMWRT_SGL_R);
+Serial.print("COMM_CTRL = 0x"); Serial.println(scratch[4], HEX);
+// read DAISY_CHAIN_CTRL
+ReadReg(0,  DAISY_CHAIN_CTRL, scratch, 1, 0, FRMWRT_SGL_R);
+Serial.print("DAISY_CHAIN_CTRL = 0x"); Serial.println(scratch[4], HEX);
 
   AutoAddress();
 
@@ -60,8 +69,8 @@ void setup() {
 
   delay(3*TOTALBOARDS+901);                             //3us of re-clocking delay per board + 901us waiting for first ADC conversion to complete
   
-  
 //Serial2.println("OK");*/
+while(1);
 }
 
 void loop() {

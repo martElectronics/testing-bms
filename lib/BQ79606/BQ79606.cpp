@@ -66,7 +66,7 @@ void Wake79606() {
     digitalWrite(Wake_pin, LOW);  // assert wake (active low)
     delayMicroseconds(275);       //250us to 300us
     digitalWrite(Wake_pin, HIGH); // deassert wake
-    delay(12*TOTALBOARDS);        //tSU(WAKE) transition time from shutdown to active - 7ms from wake receive to wake propagate for each device
+    delay(7*TOTALBOARDS);        //tSU(WAKE) transition time from shutdown to active - 7ms from wake receive to wake propagate for each device
 }
 
 
@@ -90,7 +90,7 @@ void CommSleepToWake(void) {
 
 	delayMicroseconds(260);     // 250us to 300us, same as wake
 
-    BMS_UART.begin(BAUDRATE, SERIAL_8N1);   //UART inicilization
+    BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
     
     delayMicroseconds(170*TOTALBOARDS);     //tSU(SLPtoACT) transition time from sleep to active - 170us from wake receive to wake propagate for each device
 }
@@ -105,7 +105,7 @@ void CommReset(int BAUD) {
 	delayMicroseconds(500);     // should cover any possible baud rate
 	digitalWrite(BMS_TX,1);     //RX to High
 
-    BMS_UART.begin(250000, SERIAL_8N1);   //UART inicilization at 250000 Mbs
+   BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
 
     //tell the base device to set its baudrate to the chosen BAUDRATE, and propagate to the rest of the stack
     //then set the microcontroller to the appropriate baudrate to match
@@ -115,7 +115,7 @@ void CommReset(int BAUD) {
 		delayMicroseconds(500);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 1M baudrate
+        BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
     }
     else if(BAUD == 500000)
     {   
@@ -123,7 +123,7 @@ void CommReset(int BAUD) {
 		delayMicroseconds(250);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
+       BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
     }
     else if(BAUD == 250000)
     {
@@ -131,7 +131,7 @@ void CommReset(int BAUD) {
 		delayMicroseconds(250);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 250k baudrate
+        //BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 250k baudrate
     }
     else if(BAUD == 125000)
     {
@@ -139,7 +139,7 @@ void CommReset(int BAUD) {
 		delayMicroseconds(250);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
+        BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
     }
     else
     {
@@ -163,25 +163,26 @@ void CommReset(int BAUD) {
 //**********************
 void AutoAddress()
 {
+	int t=100; //estaba a 100
     memset(response_frame2,0,sizeof(response_frame2)); //clear out the response frame buffer
 
     //dummy write to ECC_TEST (sync DLL)
     WriteReg(0,  ECC_TEST, 0x00, 1, FRMWRT_ALL_NR);
-	delay(100);
+	delay(t);
 
 	//clear CONFIG in case it is set
     WriteReg(0, CONFIG, 0x00, 1, FRMWRT_ALL_NR);
-	delay(100);
+	delay(t);
 
     //enter auto addressing mode
     WriteReg(0, CONTROL1, 0x01, 1, FRMWRT_ALL_NR);
-	delay(100);
+	delay(t);
 
     //set addresses for all boards in daisy-chain
     for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++)
     {
         WriteReg(0, DEVADD_USR, nCurrentBoard, 1, FRMWRT_ALL_NR);
-		delay(100);
+		delay(t);
     }
 
 
@@ -191,7 +192,7 @@ void AutoAddress()
     if(TOTALBOARDS==1)
     {
         WriteReg(0, CONFIG, 0x01, 1, FRMWRT_SGL_NR);	//Base and top device
-		delay(100);
+		delay(t);
     }
     //otherwise set the base and top of stack individually
     else
@@ -201,11 +202,11 @@ void AutoAddress()
 		for (nCurrentBoard = 1; nCurrentBoard < (TOTALBOARDS-1); nCurrentBoard++)
     	{
         	WriteReg(nCurrentBoard, CONFIG, 0x02, 1, FRMWRT_SGL_NR); //Stack
-			delay(100);
+			delay(t);
     	}
 		
         WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR); //top of stack
-		delay(100);
+		delay(t);
     }
 
 
@@ -213,7 +214,7 @@ void AutoAddress()
     {
         //dummy read from ECC_TEST (sync DLL)
     	ReadReg(nCurrentBoard, ECC_TEST, response_frame2, 1, 0, FRMWRT_SGL_R);
-		delay(100);
+		delay(t);
     }
 
     
