@@ -3,20 +3,10 @@
 
 #include <Arduino.h>
 
+//*Quitar luego*//
+#define CONTROL2_INIT_BALUE 0x13
 
-// User defines
-#define TOTALBOARDS 24    //MUST SET: total boards in the stack
-#define BAUDRATE  250000    //set global baudrate
-#define MAXBYTES  6*2        //6 CELLS, 2 byteS EACH
-#define Wake_pin  4         //Wake up pin number in ESP32
-#define Fault_pin 2          //Fault pin number in ESP32
-#define BMS_OK    13          //Fault pin number in ESP32
-#define BMS_RX    16         //UART RX pin for BMS
-#define BMS_TX    17         //UART TX pin for BMS
-
-
-
-
+// Values send mensagges
 #define FRMWRT_SGL_R	  0x00 // single device read 
 #define FRMWRT_SGL_NR	  0x10 // single device writeBG
 #define FRMWRT_STK_R	  0x20 // stack read
@@ -486,25 +476,56 @@
 #define CUST_CRC_RSLTL			0x02E2 // Calculated customer CRC result low byte
 
 
-// Function Prototypes
-void Wake79606();
-void Ini_ESP();
-void InitDevices();
-void CommClear(void);
-void CommSleepToWake(void);
-void CommReset(int BAUD);
-void AutoAddress(void);
-bool GetFaultStat();
+#define MAXBYTES 6*2 
 
-float Complement(uint16_t rawData, float multiplier);
+class BQ79606 {
+    protected:
+        // Métodos 
+        void Ini_ESP();
+        void Wake79606();
+        void CommClear();
+        void CommSleepToWake();
+        void CommReset(int32_t baudRate);
+        void AutoAddress();
+        void InitDevices();
+        int  WriteReg(byte bID, uint16_t wAddr, uint64_t dwData, byte bLen, byte bWriteType);
+        int  ReadReg(byte bID, uint16_t wAddr, byte* pData, byte bLen, uint32_t dwTimeOut, byte bWriteType);
+        uint16_t CRC16(byte *pBuf, int nLen);
+        bool GetFaultStat();
+        float Complement(uint16_t rawData, float multiplier);
 
-uint16_t CRC16(byte *pBuf, int nLen);
+        //Atributos 
+        int totalBoards;
+        int baudRate;
+        int wakePin;
+        int faultPin;
+        int bmsOkPin;
+        int bmsRxPin;
+        int bmsTxPin;
+    private:
+        //Atributos privados
+        bool UART_RX_RDY = 0;
+        int RTI_TIMEOUT;//extern
+        int bRes = 0;
+        unsigned long count = 10000;
+        bool UART_Timeout = false;
+        byte bBuf[8];
+        byte bReturn = 0;
+        uint8_t pFrame[(MAXBYTES+6)*24];
+        byte response_frame2[(MAXBYTES+6)*24];
+        byte bFrame[(MAXBYTES+6)*24];
 
-int  WriteReg(byte bID, uint16_t wAddr, uint64_t dwData, byte bLen, byte bWriteType);
-int  ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOut, byte bWriteType);
+    
+        const int MySerialRX = bmsRxPin;
+        const int MySerialTX = bmsTxPin;
 
-int  WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteType);
-int  ReadFrameReq(byte bID, uint16_t wAddr, byte bByteToReturn,byte bWriteType);
+        //Metodos no estaticos privados
+    
+        int WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteType);
+        int ReadFrameReq(byte bID, uint16_t wAddr, byte bByteToReturn, byte bWriteType);
 
+    public:
+        BQ79606(uint8_t totalBoards,uint32_t baudRate,uint8_t wakePin,uint8_t faultPin,uint8_t bmsOkPin,uint8_t bmsRxPin,uint8_t bmsTxPin);
+    };
 
 #endif

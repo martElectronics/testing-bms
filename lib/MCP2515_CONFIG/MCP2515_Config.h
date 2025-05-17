@@ -171,5 +171,4 @@ public:
         filters_shifted = shiftNestedVector(filters, n);
     }
 };
-
 #endif

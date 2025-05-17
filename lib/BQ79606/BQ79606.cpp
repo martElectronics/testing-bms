@@ -1,23 +1,11 @@
 #include "BQ79606.h"
 #include <HardwareSerial.h>
 
-//hw_timer_t *Reciving_Timeout = NULL;
-bool UART_RX_RDY = 0;
-extern int RTI_TIMEOUT;
-int bRes = 0;
-int count = 10000;
-bool UART_Timeout = false;
-uint8_t pFrame[(MAXBYTES+6)*TOTALBOARDS];
-byte bBuf[8];
-byte bReturn = 0;
-byte response_frame2[(MAXBYTES+6)*TOTALBOARDS];
-byte bFrame[(2+6)*TOTALBOARDS];
-uint8_t nCurrentBoard = 0;
 
-HardwareSerial	BMS_UART(2); // definir un Serial para UART1
 
-const int MySerialRX = BMS_RX;
-const int MySerialTX = BMS_TX;
+
+
+//HardwareSerial	BMS_UART(2); // definir un Serial para UART1
 
 
 
@@ -32,21 +20,41 @@ const int MySerialTX = BMS_TX;
 //******
 
 //Inicilization command
-void Ini_ESP(){
+
+BQ79606::BQ79606(uint8_t totalBoards,uint32_t baudRate,uint8_t wakePin,uint8_t faultPin,uint8_t bmsOkPin,uint8_t bmsRxPin,uint8_t bmsTxPin) {
+
+	this->totalBoards = totalBoards;
+	this->baudRate = baudRate;
+	this->wakePin = wakePin;
+	this->faultPin = faultPin;
+	this->bmsOkPin = bmsOkPin;
+	this->bmsRxPin = bmsRxPin;
+	this->bmsTxPin = bmsTxPin;
+
+	//Serial1.begin(baudRate, SERIAL_8N1, MySerialRX, MySerialTX);
+	//Serial1.setTimeout(1000); // Set timeout for Serial1
+	//Serial1.setBufferSize(1024); // Set buffer size for Serial1
+
+	//Serial.begin(115200);
+}
+void BQ79606::Ini_ESP(){
 
     //Wake up pin inicialization
-    pinMode(Wake_pin, OUTPUT);
-    digitalWrite(Wake_pin, HIGH);
+    pinMode(wakePin, OUTPUT);
+    digitalWrite(wakePin, HIGH);
 
-	pinMode(BMS_OK, OUTPUT);
-	digitalWrite(BMS_OK, HIGH);
+	pinMode(bmsOkPin, OUTPUT);
+	digitalWrite(bmsOkPin, HIGH);
 
 	//Fault pin Inicialization
-	pinMode(Fault_pin, INPUT);
+	pinMode(faultPin, INPUT);
 
     //UART inicilization
     Serial.begin(115200);
-	BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
+	Serial2.begin(250000);
+
+	Serial.println("Master inicialized");
+	Serial.println(wakePin);
 	
 
 	//UART reciving TimeOut timer
@@ -61,51 +69,54 @@ void Ini_ESP(){
 
 
 //Wake up instruction
-void Wake79606() {
+void BQ79606::Wake79606() {
     // toggle wake signal
-    digitalWrite(Wake_pin, LOW);  // assert wake (active low)
+    digitalWrite(wakePin, LOW);  // assert wake (active low)
     delayMicroseconds(275);       //250us to 300us
-    digitalWrite(Wake_pin, HIGH); // deassert wake
-    delay(12*TOTALBOARDS);        //tSU(WAKE) transition time from shutdown to active - 7ms from wake receive to wake propagate for each device
+    digitalWrite(wakePin, HIGH); // deassert wake
+    delay(12*totalBoards);        //tSU(WAKE) transition time from shutdown to active - 7ms from wake receive to wake propagate for each deviceç
+	Serial.println("Wake79606");
 }
 
 
 
 //Communication Clear
-void CommClear(void){
-    BMS_UART.end();             //Comunication end
-    pinMode(BMS_TX,OUTPUT);     //RX pin is an output
-    digitalWrite(BMS_TX,0);     //RX to low
+void BQ79606::CommClear(void){
+    Serial2.end();             //Comunication end
+    pinMode(bmsTxPin,OUTPUT);     //RX pin is an output
+    digitalWrite(bmsTxPin,0);     //RX to low
 
-    delay(17*(BAUDRATE/1000));  //Wait 17 bits periods
+    delay(17*(baudRate/1000));  //Wait 17 bits periods
+	Serial.println("CommClear");
+	delay(100);                 //Wait 100ms for the device to be ready to receive commands
 }
 
 
 
 //Device go to sleep to active state
-void CommSleepToWake(void) {
-    BMS_UART.end();             //Comunication end
-    pinMode(BMS_TX,OUTPUT);     //RX pin is an output
-    digitalWrite(BMS_TX,0);     //RX to low
+void BQ79606::CommSleepToWake(void) {
+    Serial2.end();             //Comunication end
+    pinMode(bmsTxPin,OUTPUT);     //RX pin is an output
+    digitalWrite(bmsTxPin,0);     //RX to low
 
 	delayMicroseconds(260);     // 250us to 300us, same as wake
 
-    BMS_UART.begin(BAUDRATE, SERIAL_8N1);   //UART inicilization
+    Serial2.begin(baudRate, SERIAL_8N1);   //UART inicilization
     
-    delayMicroseconds(170*TOTALBOARDS);     //tSU(SLPtoACT) transition time from sleep to active - 170us from wake receive to wake propagate for each device
+    delayMicroseconds(170*totalBoards);     //tSU(SLPtoACT) transition time from sleep to active - 170us from wake receive to wake propagate for each device
 }
 
 
 
 //Communication Reset
-void CommReset(int BAUD) {
-    BMS_UART.end();             //Comunication end
-	pinMode(BMS_TX,OUTPUT);     //RX pin is an output
-    digitalWrite(BMS_TX,0);     //RX to low
+void BQ79606::CommReset(int32_t BAUD) {
+    Serial2.end();             //Comunication end
+	pinMode(bmsTxPin,OUTPUT);     //RX pin is an output
+    digitalWrite(bmsTxPin,0);     //RX to low
 	delayMicroseconds(500);     // should cover any possible baud rate
-	digitalWrite(BMS_TX,1);     //RX to High
+	digitalWrite(bmsTxPin,1);     //RX to High
 
-    BMS_UART.begin(250000, SERIAL_8N1);   //UART inicilization at 250000 Mbs
+    Serial2.begin(250000, SERIAL_8N1);   //UART inicilization at 250000 Mbs
 
     //tell the base device to set its baudrate to the chosen BAUDRATE, and propagate to the rest of the stack
     //then set the microcontroller to the appropriate baudrate to match
@@ -115,7 +126,7 @@ void CommReset(int BAUD) {
 		delayMicroseconds(500);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 1M baudrate
+        Serial2.begin(BAUD, SERIAL_8N1);   //UART inicilization at 1M baudrate
     }
     else if(BAUD == 500000)
     {   
@@ -123,15 +134,16 @@ void CommReset(int BAUD) {
 		delayMicroseconds(250);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
+        Serial2.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
     }
     else if(BAUD == 250000)
     {
         WriteReg(0, COMM_CTRL, 0x343C, 2, FRMWRT_ALL_NR);   //set COMM_CTRL and DAISY_CHAIN_CTRL registers
 		delayMicroseconds(250);
+
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 250k baudrate
+        Serial2.begin(BAUD, SERIAL_8N1);   //UART inicilization at 250k baudrate
     }
     else if(BAUD == 125000)
     {
@@ -139,14 +151,15 @@ void CommReset(int BAUD) {
 		delayMicroseconds(250);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
+        Serial2.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
+
     }
     else
     {
         printf("ERROR: INVALID BAUDRATE CHOSEN IN BQ79606.h FILE. Choosing default 1M baudrate:\n\n");
         WriteReg(0, COMM_CTRL, 0x3C3C, 2, FRMWRT_ALL_NR);
 		delayMicroseconds(250);
-        BMS_UART.begin(1000000, SERIAL_8N1);   //UART inicilization at 1M baudrate
+        Serial2.begin(1000000, SERIAL_8N1);   //UART inicilization at 1M baudrate
     }
 
     delayMicroseconds(100);
@@ -161,7 +174,7 @@ void CommReset(int BAUD) {
 //**********************
 //AUTO ADDRESS SEQUENCE
 //**********************
-void AutoAddress()
+void BQ79606::AutoAddress()
 {
     memset(response_frame2,0,sizeof(response_frame2)); //clear out the response frame buffer
 
@@ -178,17 +191,13 @@ void AutoAddress()
 	delay(100);
 
     //set addresses for all boards in daisy-chain
-    for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++)
+    for (uint8_t nCurrentBoard=0; nCurrentBoard < totalBoards; nCurrentBoard++)
     {
         WriteReg(0, DEVADD_USR, nCurrentBoard, 1, FRMWRT_ALL_NR);
 		delay(100);
     }
-
-
-
-
     //if there's only 1 board, it's the base AND the top of stack, so change it to those
-    if(TOTALBOARDS==1)
+    if(totalBoards==1)
     {
         WriteReg(0, CONFIG, 0x01, 1, FRMWRT_SGL_NR);	//Base and top device
 		delay(100);
@@ -198,18 +207,18 @@ void AutoAddress()
     {
         WriteReg(0, CONFIG, 0x00, 1, FRMWRT_SGL_NR);  //base
 
-		for (nCurrentBoard = 1; nCurrentBoard < (TOTALBOARDS-1); nCurrentBoard++)
+		for (uint8_t nCurrentBoard = 1; nCurrentBoard < (totalBoards-1); nCurrentBoard++)
     	{
         	WriteReg(nCurrentBoard, CONFIG, 0x02, 1, FRMWRT_SGL_NR); //Stack
 			delay(100);
     	}
 		
-        WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR); //top of stack
+        WriteReg((totalBoards - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR); //top of stack
 		delay(100);
     }
 
 
-	for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++)
+	for (uint8_t nCurrentBoard = 0; nCurrentBoard < totalBoards; nCurrentBoard++)
     {
         //dummy read from ECC_TEST (sync DLL)
     	ReadReg(nCurrentBoard, ECC_TEST, response_frame2, 1, 0, FRMWRT_SGL_R);
@@ -222,16 +231,19 @@ void AutoAddress()
 	delay(100);
 	WriteReg(1, COMM_CTRL, 0x04, 1, FRMWRT_STK_NR);  //stack
 	delay(100);
-	WriteReg((TOTALBOARDS - 1), DAISY_CHAIN_CTRL, 0x32, 1, FRMWRT_SGL_NR);  //Top
+	WriteReg((totalBoards - 1), DAISY_CHAIN_CTRL, 0x32, 1, FRMWRT_SGL_NR);  //Top
 	delay(100);
 
 
 
-	Serial.print("Addres: ");
-	delay(10);
+	Serial.println("Addres: ");
+	delay(30);
 
+	byte response_frame[(MAXBYTES+6)];
+	byte response_frame2[(MAXBYTES+6)];
+	  
     
-	for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
+	for (uint8_t nCurrentBoard = 0; nCurrentBoard < totalBoards; nCurrentBoard++) {
         memset(response_frame2, 0, sizeof(response_frame2));
         ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
 		Serial.print((String)"Board "+nCurrentBoard+"= ");
@@ -245,6 +257,11 @@ void AutoAddress()
 	}
 
 	delay(100);
+
+
+
+
+
 
 
 //    //OPTIONAL: read back all device addresses
@@ -266,7 +283,7 @@ void AutoAddress()
 
 
 
-int WriteReg(byte bID, uint16_t wAddr, uint64_t dwData, byte bLen, byte bWriteType) {
+int BQ79606::WriteReg(byte bID, uint16_t wAddr, uint64_t dwData, byte bLen, byte bWriteType) {
 	// device address, register start address, data bytes, data length, write type (single, broadcast, stack)
 	bRes = 0;
 	memset(bBuf,0,sizeof(bBuf));
@@ -339,7 +356,7 @@ int WriteReg(byte bID, uint16_t wAddr, uint64_t dwData, byte bLen, byte bWriteTy
 
 
 
-int WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteType) {
+int BQ79606::WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteType) {
 	int bPktLen = 0;
 	uint8_t * pBuf = pFrame;
 	uint16_t wCRC;
@@ -363,7 +380,7 @@ int WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteTyp
 	bPktLen += 2;
 	//THIS SEEMS to occasionally drop bytes from the frame. Sometimes is not sending the last frame of the CRC.
 	//(Seems to be caused by stack overflow, so take precautions to reduce stack usage in function calls)
-	BMS_UART.write(pFrame, bPktLen);
+	Serial2.write(pFrame, bPktLen);
 
 	return bPktLen;
 }
@@ -371,7 +388,7 @@ int WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteTyp
 
 
 //Read Register Instruction
-int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOut, byte bWriteType) {
+int BQ79606::ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOut, byte bWriteType) {
 	bRes = 0;
 	count = 100000;
 	int recepciones = 0;
@@ -382,10 +399,10 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
 		Reciving_Len = (bLen + 6);
 	}
 	else if(bWriteType == FRMWRT_STK_R){
-		Reciving_Len = (bLen + 6) * (TOTALBOARDS - 1);
+		Reciving_Len = (bLen + 6) * (totalBoards - 1);
 	}
 	else if(bWriteType == FRMWRT_ALL_R){
-		Reciving_Len = (bLen + 6) * TOTALBOARDS;
+		Reciving_Len = (bLen + 6) * totalBoards;
 	}
 	
 
@@ -401,7 +418,7 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
 
 		int Time = 0;
 		//Waiting firts byte, If not reciving the first byte in 1 second send and error
-		while((BMS_UART.available() == 0) && (Time < 10)){
+		while((Serial2.available() == 0) && (Time < 10)){
 			delay(5);
 			Time ++;
 			if(Time == 10){
@@ -416,9 +433,9 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
 			
 
 		//Data avalible, start to read all data
-		if(BMS_UART.available() > 0){
+		if(Serial2.available() > 0){
 
-			bRes = BMS_UART.readBytes(pData, Reciving_Len);
+			bRes = Serial2.readBytes(pData, Reciving_Len);
 
 		}
 	}
@@ -433,7 +450,7 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
 
 
 //Read Frame Request
-int ReadFrameReq(byte bID, uint16_t wAddr, byte bByteToReturn, byte bWriteType) {
+int BQ79606::ReadFrameReq(byte bID, uint16_t wAddr, byte bByteToReturn, byte bWriteType) {
 	
 	bReturn = bByteToReturn - 1;
 
@@ -482,7 +499,7 @@ const uint16_t crc16_table[256] = { 0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301,
 
 
 //CRC Calculation
-uint16_t CRC16(byte *pBuf, int nLen) {
+uint16_t BQ79606::CRC16(byte *pBuf, int nLen) {
 	uint16_t wCRC = 0xFFFF;
 	int i;
 
@@ -505,23 +522,19 @@ uint16_t CRC16(byte *pBuf, int nLen) {
 
 
 //Complemet calculation
-float Complement(uint16_t rawData, float multiplier)
+float BQ79606::Complement(uint16_t rawData, float multiplier)
 {
     return -1*(~rawData+1)*multiplier;
 }
 
 
 
-//Get the fault pin state, 0 if faul, 1 if not fault
-bool GetFaultStat() {
-
-	return digitalRead(Fault_pin);	//Return Fault pin value
-}
 
 
 
-//Ini Devices in the daisy_Chain
-void InitDevices() {
+
+
+void BQ79606::InitDevices() {
     /*******Optional examples of some initialization functions*****/
 
     delay(1);
@@ -562,7 +575,7 @@ void InitDevices() {
     //WriteReg(0, OTUT_CTRL, 0x3F, 1, FRMWRT_ALL_NR); //enable GPIO OT/UT
     //WriteReg(0, OTUT_THRESH, 0xFF, 1, FRMWRT_ALL_NR); //sets OT to 35% TSREF, UT to 75%, programmabe in 1% increment
     WriteReg(0, GPIO_ADC_CONF, 0x00, 1, FRMWRT_ALL_NR); //configure GPIO as AUX voltage (absolute voltage, set to 0 for ratiometric)
-    for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
+    for (uint8_t nCurrentBoard = 0; nCurrentBoard < totalBoards; nCurrentBoard++) {
         //set adc delay for each device
         WriteReg(nCurrentBoard, ADC_DELAY, 0x00, 1, FRMWRT_SGL_NR);
     }
@@ -574,29 +587,29 @@ void InitDevices() {
     WriteReg(0, CONTROL2, 0x10, 1, FRMWRT_ALL_NR);// enable TSREF to give enough settling time
     delay(2); // provides settling time for TSREF
 
-    for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
+    for (uint8_t nCurrentBoard = 0; nCurrentBoard < totalBoards; nCurrentBoard++) {
         //read PARTID
         ReadReg(nCurrentBoard, PARTID, bFrame, 1, 0, FRMWRT_SGL_R);
         delayMicroseconds(500);
     }
-    for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
+    for (uint8_t nCurrentBoard = 0; nCurrentBoard < totalBoards; nCurrentBoard++) {
         //read DEV_STAT
         ReadReg(nCurrentBoard, DEV_STAT, bFrame, 1, 0, FRMWRT_SGL_R);
         delayMicroseconds(500);
     }
-    for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
+    for (uint8_t nCurrentBoard = 0; nCurrentBoard < totalBoards; nCurrentBoard++) {
         //read LOOP_STAT
         ReadReg(nCurrentBoard, LOOP_STAT, bFrame, 1, 0, FRMWRT_SGL_R);
         delayMicroseconds(500);
     }
     delayMicroseconds(100);
-    for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
+    for (uint8_t nCurrentBoard = 0; nCurrentBoard < totalBoards; nCurrentBoard++) {
         //read FAULT_SUM
         ReadReg(nCurrentBoard, FAULT_SUM, bFrame, 1, 0, FRMWRT_SGL_R);
         delayMicroseconds(500);
     }
     delayMicroseconds(100);
-    for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
+    for (uint8_t nCurrentBoard = 0; nCurrentBoard < totalBoards; nCurrentBoard++) {
         //read cust_crc_rslt high and low byte
         ReadReg(nCurrentBoard, CUST_CRC_RSLTH, bFrame, 2, 0, FRMWRT_SGL_R); //read Customer CRC result and update
         delay(1);
@@ -605,17 +618,53 @@ void InitDevices() {
     }
 //  WriteReg(0, CONTROL2, 0x1D, 1, FRMWRT_ALL_NR); // OTUT EN, OVUV EN, Sample all cells
 
+	
+
     WriteReg(0, AUX_ADC_CTRL1, 0x01, 1, FRMWRT_ALL_NR); //convert BAT with AUX ADC
     WriteReg(0, AUX_ADC_CTRL2, 0x00, 1, FRMWRT_ALL_NR); //No AUX ADC measurements from this  register
     WriteReg(0, AUX_ADC_CTRL3, 0x00, 1, FRMWRT_ALL_NR); //No AUX ADC measurements from this register
     delayMicroseconds(100);
-    for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
+    for (uint8_t nCurrentBoard = 0; nCurrentBoard < totalBoards; nCurrentBoard++) {
         //read CB_SW_STAT
         ReadReg(nCurrentBoard, CB_SW_STAT, bFrame, 1, 0, FRMWRT_SGL_R);
         delayMicroseconds(500);
     }
     delayMicroseconds(100);
     WriteReg(0, DIAG_CTRL2, 0x41, 1, FRMWRT_ALL_NR); //set AUX ADC to measure  cell 1
+
+	WriteReg(0, SYSFLT1_FLT_RST, 0xFFFFFF, 3, FRMWRT_ALL_NR);   //reset system faults
+	WriteReg(0, SYSFLT1_FLT_MSK, 0xFFFFFF, 3, FRMWRT_ALL_NR);
+	WriteReg(0, CONTROL2, 0x10, 1, FRMWRT_ALL_NR);          //tsref activo
+
+	//SET UP MAIN ADC
+	WriteReg(0, CELL_ADC_CTRL, 0x3F, 1, FRMWRT_ALL_NR);     //enable conversions for all cells
+	WriteReg(0, CELL_ADC_CONF2, 0x08, 1, FRMWRT_ALL_NR);    //set continuous ADC conversions, and set minimum conversion interval
+
+	WriteReg(0, GPIO1_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+	WriteReg(0, GPIO2_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+	WriteReg(0, GPIO3_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+	WriteReg(0, GPIO4_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+	WriteReg(0, GPIO5_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+	WriteReg(0, GPIO6_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+
+	WriteReg(0, AUX_ADC_CTRL1, 0xF0, 1, FRMWRT_ALL_NR);       //GPIO is an input
+	WriteReg(0, AUX_ADC_CTRL2, 0x03, 1, FRMWRT_ALL_NR);       //GPIO is an input
+
+
+	WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);          //CELL_ADC_GO = 1 Y tsref y AUX_ADC_GO = 1
+
+
+  	delay(3*totalBoards+901);                             //3us of re-clocking delay per board + 901us waiting for first ADC conversion to complete
+	/*for (uint8_t nCurrentBoard = 0; nCurrentBoard < totalBoards; nCurrentBoard++) {
+			memset(response_frame2, 0, sizeof(response_frame2));
+			ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
+			Serial.print((String)"Board "+nCurrentBoard+"= ");
+			Serial.print(response_frame2[4]);
+			Serial.println(".");
+			delay(10);
+	
+	}*/
+	//delay(3*totalBoards+901);   
 
     //configure cell  balancing
     WriteReg(0, CB_CONFIG, 0x0A, 1, FRMWRT_ALL_NR); // 2 minutes duty cycle, continue on fault, odds then even
