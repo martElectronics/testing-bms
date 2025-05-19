@@ -11,10 +11,8 @@
 #define Wake_pin  18         //Wake up pin number in ESP32
 #define Fault_pin 19          //Fault pin number in ESP32
 #define BMS_OK    13          //Fault pin number in ESP32
-#define BMS_RX    17         //UART RX pin for BMS
-#define BMS_TX    16         //UART TX pin for BMS
-
-
+#define BMS_RX    17         //UART RX pin for BMS (Aquí se conecta el tx del bms)
+#define BMS_TX    16         //UART TX pin for BMS (Aquí se conecta el rx del bms)
 
 
 #define FRMWRT_SGL_R	  0x00 // single device read 
