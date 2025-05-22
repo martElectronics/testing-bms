@@ -46,7 +46,7 @@ void Ini_ESP(){
 
     //UART inicilization
     Serial.begin(115200);
-	BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
+	//BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
 	
 
 	//UART reciving TimeOut timer
@@ -105,7 +105,7 @@ void CommReset(int BAUD) {
 	delayMicroseconds(500);     // should cover any possible baud rate
 	digitalWrite(BMS_TX,1);     //RX to High
 
-    BMS_UART.begin(250000, SERIAL_8N1);   //UART inicilization at 250000 Mbs
+   BMS_UART.begin(250000, SERIAL_8N1, MySerialRX, MySerialTX);
 
     //tell the base device to set its baudrate to the chosen BAUDRATE, and propagate to the rest of the stack
     //then set the microcontroller to the appropriate baudrate to match
@@ -115,7 +115,7 @@ void CommReset(int BAUD) {
 		delayMicroseconds(500);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 1M baudrate
+        BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
     }
     else if(BAUD == 500000)
     {   
@@ -123,7 +123,7 @@ void CommReset(int BAUD) {
 		delayMicroseconds(250);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
+        BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
     }
     else if(BAUD == 250000)
     {
@@ -131,7 +131,7 @@ void CommReset(int BAUD) {
 		delayMicroseconds(250);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 250k baudrate
+        //BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
     }
     else if(BAUD == 125000)
     {
@@ -139,14 +139,14 @@ void CommReset(int BAUD) {
 		delayMicroseconds(250);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
-        BMS_UART.begin(BAUD, SERIAL_8N1);   //UART inicilization at 500k baudrate
+        BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
     }
     else
     {
         printf("ERROR: INVALID BAUDRATE CHOSEN IN BQ79606.h FILE. Choosing default 1M baudrate:\n\n");
         WriteReg(0, COMM_CTRL, 0x3C3C, 2, FRMWRT_ALL_NR);
 		delayMicroseconds(250);
-        BMS_UART.begin(1000000, SERIAL_8N1);   //UART inicilization at 1M baudrate
+        BMS_UART.begin(1000000, SERIAL_8N1, MySerialRX, MySerialTX);
     }
 
     delayMicroseconds(100);
