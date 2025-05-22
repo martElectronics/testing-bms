@@ -6,13 +6,16 @@
 
 void setup() {
 
+ bool ok=false;
   Ini_ESP();
 
-  Wake79606();
-
-  CommReset(BAUDRATE);
-
-  AutoAddress();
+  
+  while(!ok)
+  {
+    Wake79606();
+    CommReset(BAUDRATE);
+    ok= AutoAddress();
+  }
 
   Serial.print("Addres: ");
 	delay(10);

@@ -5,7 +5,7 @@
 
 
 // User defines
-#define TOTALBOARDS 2    //MUST SET: total boards in the stack
+#define TOTALBOARDS 4    //MUST SET: total boards in the stack
 #define BAUDRATE  250000    //set global baudrate
 #define MAXBYTES  6*2        //6 CELLS, 2 byteS EACH
 #define Wake_pin  18         //Wake up pin number in ESP32 (4 original)
@@ -493,7 +493,7 @@ void InitDevices();
 void CommClear(void);
 void CommSleepToWake(void);
 void CommReset(int BAUD);
-void AutoAddress(void);
+bool AutoAddress(void);
 bool GetFaultStat();
 
 float Complement(uint16_t rawData, float multiplier);

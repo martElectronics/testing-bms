@@ -161,7 +161,7 @@ void CommReset(int BAUD) {
 //**********************
 //AUTO ADDRESS SEQUENCE
 //**********************
-void AutoAddress()
+bool AutoAddress()
 {
     memset(response_frame2,0,sizeof(response_frame2)); //clear out the response frame buffer
 
@@ -230,14 +230,15 @@ void AutoAddress()
 	Serial.print("Addres: ");
 	delay(10);
 
-    
+    bool ok=true;
 	for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
         memset(response_frame2, 0, sizeof(response_frame2));
         ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
 		Serial.print((String)"Board "+nCurrentBoard+"= ");
 
         Serial.print(response_frame2[4]);
-
+		//Devuelve false si no se ha hecho bien el autoadressing
+		if(response_frame2[4]!=nCurrentBoard) ok=false; 
 		Serial.println(".");
 
 		delay(10);
@@ -253,6 +254,7 @@ void AutoAddress()
 //        ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
 //        printf("Board %d=%02x\n",nCurrentBoard,response_frame2[4]);
 //    }
+return ok;
 }
 //**************************
 //END AUTO ADDRESS SEQUENCE
