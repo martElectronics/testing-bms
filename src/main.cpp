@@ -23,7 +23,7 @@ byte cmdChargerByte[8];
 void controlCharge(float maxVolt,float maxCurrent, bool start);
 void mostrarDatosDetallados();
 void showChargeData();
-void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset);
+void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset, bool &fail);
 
 
 
@@ -31,12 +31,12 @@ void setup() {
 
  bool ok=false;
   Ini_ESP();
-  while(!ok)
-  {
-    Wake79606();
-    CommReset(BAUDRATE);
-    ok= AutoAddress();
-  }
+  // while(!ok)
+  // {
+  //   Wake79606();
+  //   CommReset(BAUDRATE);
+  //   ok= AutoAddress();
+  // }
 
   Serial.print("Addres: ");
 	delay(10);
@@ -100,29 +100,37 @@ void loop() {
   static bool cmdCharge = false;
   static bool stsVoltagesOK=false;
   static bool cmdResetFail = false;
+  static bool stsFail = false;
   static float corrienteCarga=0;
 
   CAN.receive();
   CAN.getPacket(idStsCharger,stsChargerByte,8,false);
-  procesarComandoSerial(corrienteCarga,cmdCharge,cmdResetFail);
+
 
   readVoltages(stsVoltagesOK);
+  procesarComandoSerial(corrienteCarga,cmdCharge,cmdResetFail,stsVoltagesOK);
 
   if(!stsVoltagesOK)
   {
-    cmdCharge=false;
+    stsFail=1;
   }
   else if(stsVoltagesOK && cmdResetFail)
   {
     cmdResetFail=false;
+    stsFail=0;
   }
   
+  if(stsFail)
+  {
+    cmdCharge=0;
+    corrienteCarga=0;
+  }
   
 
    controlCharge(24,corrienteCarga,cmdCharge);
    CAN.send();
    //printVoltages();
-   Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
+   //Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
 
    static int t=millis();
    if((millis()-t)>=1000)
@@ -143,7 +151,7 @@ CAN.printByteArray(stsChargerByte,8);
  * @param valorFloatRef Referencia a la variable float que se modificará con el comando 'c'.
  * @param valorBoolRef Referencia a la variable bool que se modificará con el comando 'c'.
  */
-void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset) {
+void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset, bool &fail) {
   // Solo procesa si hay datos disponibles en el buffer del puerto serie
   if (Serial.available() > 0) {
     // Lee la cadena completa hasta que encuentra un salto de línea
@@ -187,6 +195,9 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     // --- Comando 'r': ejecutar función R ---
     } else if (comando == "r") {
       reset=1;
+
+      } else if (comando == "f") {
+      fail=0;
     
     // --- Comando desconocido ---
     } else if (comando.length() > 0) {
@@ -413,7 +424,7 @@ void readVoltages(bool &ok)
               res2 = ReadReg(currentBoard, AUX_GPIO1H, response_frame2, MAXBYTES, 0, FRMWRT_SGL_R);
               if((res1<=0) || (res2<=0))
               {
-                ok=false;
+                //ok=false;
                 Serial.println("Error de lectura numBytes=0");
               }
               //response frame actually starts with top of stack, so currentBoard is actually inverted from what it should be
