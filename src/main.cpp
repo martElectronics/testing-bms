@@ -2,6 +2,7 @@
 //#include <BQ79606.h>
 #include "BQ79606.h"
 #include <MART_CAN.h>
+#include <set>
 
 CAN_BUS CAN(HardwareType::Transciever, MCP_SPEED_500, 2,10);
 
@@ -12,8 +13,21 @@ float stsTempCells[12][9];
 void readVoltages(bool &ok);
 void printVoltages();
 float voltToTemp(float GPIOVoltage);
+// Estructura para definir un punto de exclusión.
+struct ExclusionPoint {
+    int idModule;
+    int contVoltNTC;
 
-
+    // Sobrecarga del operador '<' para que std::set pueda ordenar los elementos.
+    bool operator<(const ExclusionPoint& other) const {
+        if (idModule != other.idModule) {
+            return idModule < other.idModule;
+        }
+        return contVoltNTC < other.contVoltNTC;
+    }
+};
+// Declaramos la lista de exclusión como una variable global.
+std::set<ExclusionPoint> exclusionList;
 
 //******CHARGE    */
 unsigned long idStsCharger=0x18FF50E5;
@@ -31,12 +45,12 @@ void setup() {
 
  bool ok=false;
   Ini_ESP();
-  while(!ok)
-  {
-    Wake79606();
-    CommReset(BAUDRATE);
-    ok= AutoAddress();
-  }
+  // while(!ok)
+  // {
+  //   Wake79606();
+  //   CommReset(BAUDRATE);
+  //   ok= AutoAddress();
+  // }
 
   Serial.print("Addres: ");
 	delay(10);
@@ -105,6 +119,7 @@ void loop() {
 
   CAN.receive();
   CAN.getPacket(idStsCharger,stsChargerByte,8,false);
+  
 
 
   
@@ -138,7 +153,8 @@ void loop() {
    {
       //Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
       //showChargeData();
-      readVoltages(stsVoltagesOK);
+     // readVoltages(stsVoltagesOK);
+     CAN.printByteArray(stsChargerByte,8);
    }
 }
 

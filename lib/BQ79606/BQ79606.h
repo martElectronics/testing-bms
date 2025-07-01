@@ -5,16 +5,15 @@
 
 
 // User defines
-#define TOTALBOARDS 2    //MUST SET: total boards in the stack
+#define TOTALBOARDS 4    //MUST SET: total boards in the stack
 #define BAUDRATE  250000    //set global baudrate
 #define MAXBYTES  6*2        //6 CELLS, 2 byteS EACH
 #define Wake_pin  18         //Wake up pin number in ESP32 (4 original)
 #define Fault_pin 2          //Fault pin number in ESP32
-#define BMS_OK    13          //Fault pin number in ESP32
+#define BMS_OK    7          //Fault pin number in ESP32
 #define BMS_RX    16         //UART RX pin for BMS (16 origial)
 #define BMS_TX    17         //UART TX pin for BMS (17 original)
-
-
+#define PWM_FANS  6         //UART TX pin for BMS (17 original)
 
 
 #define FRMWRT_SGL_R	  0x00 // single device read 
