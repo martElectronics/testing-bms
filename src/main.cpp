@@ -31,12 +31,12 @@ void setup() {
 
  bool ok=false;
   Ini_ESP();
-  // while(!ok)
-  // {
-  //   Wake79606();
-  //   CommReset(BAUDRATE);
-  //   ok= AutoAddress();
-  // }
+  while(!ok)
+  {
+    Wake79606();
+    CommReset(BAUDRATE);
+    ok= AutoAddress();
+  }
 
   Serial.print("Addres: ");
 	delay(10);
@@ -107,7 +107,8 @@ void loop() {
   CAN.getPacket(idStsCharger,stsChargerByte,8,false);
 
 
-  readVoltages(stsVoltagesOK);
+  
+// printVoltages();
   procesarComandoSerial(corrienteCarga,cmdCharge,cmdResetFail,stsVoltagesOK);
 
   if(!stsVoltagesOK)
@@ -135,8 +136,9 @@ void loop() {
    static int t=millis();
    if((millis()-t)>=1000)
    {
-      Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
-      showChargeData();
+      //Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
+      //showChargeData();
+      readVoltages(stsVoltagesOK);
    }
 }
 
@@ -198,6 +200,10 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
 
       } else if (comando == "f") {
       fail=0;
+      }
+    else if (comando == "p") {
+     printVoltages();
+      
     
     // --- Comando desconocido ---
     } else if (comando.length() > 0) {
@@ -397,7 +403,6 @@ void controlCharge(float maxVolt, float maxCurrent, bool start) {
 void readVoltages(bool &ok)
 {
   ok=true;
- delay(10);
     //VARIABLES
     byte response_frame[(MAXBYTES+6)];
     byte response_frame2[(MAXBYTES+6)];
@@ -410,8 +415,7 @@ void readVoltages(bool &ok)
         i = 0;
         currentBoard=0;
         WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);
-        
-        
+        delay(200);
         
           //PARSE, FORMAT, AND PRINT THE DATA
           for(currentBoard = 0; currentBoard<TOTALBOARDS; currentBoard++)
@@ -424,8 +428,15 @@ void readVoltages(bool &ok)
               res2 = ReadReg(currentBoard, AUX_GPIO1H, response_frame2, MAXBYTES, 0, FRMWRT_SGL_R);
               if((res1<=0) || (res2<=0))
               {
-                //ok=false;
+                ok=false;
                 Serial.println("Error de lectura numBytes=0");
+              }
+
+              //Cambio al módulo siguiente, reset de contadores
+              if((currentBoard%2)==0)
+              {
+                contVoltCells=0;
+                contVoltNTC=0;
               }
               //response frame actually starts with top of stack, so currentBoard is actually inverted from what it should be
               //go through each byte in the current board (12 bytes = 6 cells * 2 bytes each)
@@ -433,7 +444,7 @@ void readVoltages(bool &ok)
               {
                 uint16_t rawData = (response_frame[i+4] << 8) | response_frame[i+5];
                 float cellVoltage = Complement(rawData,0.00019073);
-                cellVoltage=4;
+                //cellVoltage=4;
                 
                 if(cellVoltage >= 4.2 || cellVoltage<=2.5){
                   ok=false;
@@ -444,10 +455,7 @@ void readVoltages(bool &ok)
                 stsVoltCells[idModule][contVoltCells]=cellVoltage;
                 contVoltCells++;
                 }
-                else
-                {
-                  contVoltCells=0;
-                }
+    
                 
               }
 
@@ -462,19 +470,18 @@ void readVoltages(bool &ok)
 
                 //do the two's complement of the resultant 16 bit data item, and multiply by 190.73uV to get an actual voltage
                 float GPIOVoltage = Complement(rawData,0.00019073);
-                GPIOVoltage=1.08;
+               // GPIOVoltage=1.08;
+              // Serial.println((String)"GPIO " +(i/2)+" Voltage= " +GPIOVoltage);
                 float temp= voltToTemp(GPIOVoltage);
                 if(temp >= 60 ){
                   ok=false;
                 }
                 if(contVoltNTC<9)
                 {
+                  
+                //Serial.println(contVoltNTC);
                 stsTempCells[idModule][contVoltNTC]=temp;
                 contVoltNTC++;
-                }
-                else
-                {
-                  contVoltNTC=0;
                 }
                 //print the voltages - it is i/2 because cells start from 1 up to 6
                 //and there are 2 bytes per cell (i value is twice the cell number),
