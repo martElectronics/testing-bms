@@ -7,34 +7,63 @@
 CAN_BUS CAN(HardwareType::Transciever, MCP_SPEED_500, 2,10);
 
 //BMS
+// --- Configuración de Dimensiones de Arrays ---
+const int MAX_MODULES = TOTALBOARDS/2;
+const int SENSORS_PER_MODULE_VOLT = 11;
+const int SENSORS_PER_MODULE_TEMP = 9;
 float stsVoltCells[12][11];
 float stsTempCells[12][9];
+// --- Arrays de Resultados (Fallas) ---
+bool stsVoltCellsFail[MAX_MODULES][SENSORS_PER_MODULE_VOLT];
+bool stsTempCellsFail[MAX_MODULES][SENSORS_PER_MODULE_TEMP];
 
+// --- Márgenes Parametrizables ---
+const float MIN_VALID_VOLTAGE = 3.0f;
+const float MAX_VALID_VOLTAGE = 4.2f;
+const float MIN_VALID_TEMP = -10.0f;
+const float MAX_VALID_TEMP = 60.0f;
+
+void configBMS();
 void readVoltages(bool &ok);
 void printVoltages();
 float voltToTemp(float GPIOVoltage);
-// Estructura para definir un punto de exclusión.
-struct ExclusionPoint {
-    int idModule;
-    int contVoltNTC;
+void checkFails();
 
-    // Sobrecarga del operador '<' para que std::set pueda ordenar los elementos.
-    bool operator<(const ExclusionPoint& other) const {
-        if (idModule != other.idModule) {
-            return idModule < other.idModule;
-        }
-        return contVoltNTC < other.contVoltNTC;
+void setupExclusions();
+void populateTestData();
+void printFailResults();
+// Estructura para definir un punto de exclusión.
+// Estructura y lista para excluir sensores de VOLTAJE
+struct VoltExclusionPoint {
+    int idModule;
+    int idVolt; // Índice del sensor de voltaje
+
+    bool operator<(const VoltExclusionPoint& other) const {
+        if (idModule != other.idModule) return idModule < other.idModule;
+        return idVolt < other.idVolt;
     }
 };
-// Declaramos la lista de exclusión como una variable global.
-std::set<ExclusionPoint> exclusionList;
+std::set<VoltExclusionPoint> voltExclusionList;
+
+// Estructura y lista para excluir sensores de TEMPERATURA
+struct TempExclusionPoint {
+    int idModule;
+    int idNTC; // Índice del sensor de temperatura (NTC)
+
+    bool operator<(const TempExclusionPoint& other) const {
+        if (idModule != other.idModule) return idModule < other.idModule;
+        return idNTC < other.idNTC;
+    }
+};
+std::set<TempExclusionPoint> tempExclusionList;
+
 
 //******CHARGE    */
 unsigned long idStsCharger=0x18FF50E5;
 unsigned long idCmdCharger=0x1806E5F4;
 byte stsChargerByte[8];
 byte cmdChargerByte[8];
-void controlCharge(float maxVolt,float maxCurrent, bool start);
+void controlCharge(float maxVolt, float maxCurrent, bool start);
 void mostrarDatosDetallados();
 void showChargeData();
 void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset, bool &fail);
@@ -44,68 +73,25 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
 void setup() {
 
  bool ok=false;
-  Ini_ESP();
-  // while(!ok)
-  // {
-  //   Wake79606();
-  //   CommReset(BAUDRATE);
-  //   ok= AutoAddress();
-  // }
-
-  Serial.print("Addres: ");
-	delay(10);
-
-  int nCurrentBoard = 0;
-  byte response_frame[(MAXBYTES+6)];
-  byte response_frame2[(MAXBYTES+6)];
-    
-	for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
-    memset(response_frame2, 0, sizeof(response_frame2));
-    ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
-		Serial.print((String)"Board "+nCurrentBoard+"= ");
-
-    Serial.print(response_frame2[4]);
-
-		Serial.println(".");
-
-		delay(10);
-
-	}
-
-  InitDevices();
-
-  WriteReg(0, SYSFLT1_FLT_RST, 0xFFFFFF, 3, FRMWRT_ALL_NR);   //reset system faults
-  WriteReg(0, SYSFLT1_FLT_MSK, 0xFFFFFF, 3, FRMWRT_ALL_NR);
-  WriteReg(0, CONTROL2, 0x10, 1, FRMWRT_ALL_NR);          //tsref activo
-  
-  //SET UP MAIN ADC
-  WriteReg(0, CELL_ADC_CTRL, 0x3F, 1, FRMWRT_ALL_NR);     //enable conversions for all cells
-  WriteReg(0, CELL_ADC_CONF2, 0x08, 1, FRMWRT_ALL_NR);    //set continuous ADC conversions, and set minimum conversion interval
-
-  WriteReg(0, GPIO1_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
-  WriteReg(0, GPIO2_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
-  WriteReg(0, GPIO3_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
-  WriteReg(0, GPIO4_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
-  WriteReg(0, GPIO5_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
-  WriteReg(0, GPIO6_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
-
-  WriteReg(0, AUX_ADC_CTRL1, 0xF0, 1, FRMWRT_ALL_NR);       //GPIO is an input
-  WriteReg(0, AUX_ADC_CTRL2, 0x03, 1, FRMWRT_ALL_NR);       //GPIO is an input
-
-
-  WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);          //CELL_ADC_GO = 1 Y tsref y AUX_ADC_GO = 1
-
-
-  delay(3*TOTALBOARDS+901);                             //3us of re-clocking delay per board + 901us waiting for first ADC conversion to complete
-  
+ 
+  //configBMS();
+  Serial.begin(115200);
      while(CAN.error == 1){
       Serial.println("Error Initializing EScP32Can...");
    }
    Serial.println("CAN OK");
 
  
-mostrarDatosDetallados();
 
+setupExclusions();
+    populateTestData();
+    
+    Serial.println("\nEjecutando checkFails()...");
+    checkFails();
+    
+    printFailResults();
+    
+    Serial.println("\n--- Fin de la demostración ---");
 
 }
 
@@ -119,7 +105,7 @@ void loop() {
 
   CAN.receive();
   CAN.getPacket(idStsCharger,stsChargerByte,8,false);
-  
+  controlCharge(94,corrienteCarga,1);
 
 
   
@@ -139,11 +125,9 @@ void loop() {
   if(stsFail)
   {
     cmdCharge=0;
-    corrienteCarga=0;
+   // corrienteCarga=0;
   }
-  
 
-   controlCharge(24,corrienteCarga,cmdCharge);
    CAN.send();
    //printVoltages();
    //Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
@@ -154,8 +138,13 @@ void loop() {
       //Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
       //showChargeData();
      // readVoltages(stsVoltagesOK);
-     CAN.printByteArray(stsChargerByte,8);
+     //CAN.printByteArray(stsChargerByte,8);
    }
+
+digitalWrite(BMS_OK, true);
+
+
+
 }
 
 void debug(){
@@ -399,7 +388,7 @@ void controlCharge(float maxVolt, float maxCurrent, bool start) {
     curr_low_byte = scaled_current & 0xFF;
 
 
-     byte cmdChargerByte[8];
+   byte cmdChargerByte[8];
   for(int i=0;i<8;i++)
   {
    cmdChargerByte[i]=0x00;
@@ -410,10 +399,63 @@ void controlCharge(float maxVolt, float maxCurrent, bool start) {
   cmdChargerByte[3]=curr_low_byte;
   cmdChargerByte[4]=(byte)!start;
 
-   CAN.setPacket(idCmdCharger,cmdChargerByte,8,false);
+   CAN.setPacket(23,cmdChargerByte,8,false);
+   Serial.println("AAA");
 
 }
 
+/**
+ * @brief Recorre los arrays de lecturas, las valida contra márgenes
+ * y actualiza los arrays de fallas, respetando las listas de exclusión.
+ */
+void checkFails() {
+    // --- 1. Comprobación de Voltajes ---
+    for (int i = 0; i < MAX_MODULES; ++i) {
+        for (int j = 0; j < SENSORS_PER_MODULE_VOLT; ++j) {
+            
+            VoltExclusionPoint pointToCheck = { .idModule = i, .idVolt = j };
+            
+            // Verificamos si el punto actual está en la lista de exclusión de voltajes
+            if (voltExclusionList.find(pointToCheck) == voltExclusionList.end()) {
+                // NO está excluido: Procedemos a la validación
+                float currentVoltage = stsVoltCells[i][j];
+                
+                if (currentVoltage < MIN_VALID_VOLTAGE || currentVoltage > MAX_VALID_VOLTAGE) {
+                    stsVoltCellsFail[i][j] = true; // El valor está fuera de rango -> FALLA
+                } else {
+                    stsVoltCellsFail[i][j] = false; // El valor está en rango -> OK
+                }
+            } else {
+                // SÍ está excluido: Lo marcamos como "no fallido" por defecto.
+                // No queremos falsas alarmas de sensores que hemos decidido ignorar.
+                stsVoltCellsFail[i][j] = false;
+            }
+        }
+    }
+
+    // --- 2. Comprobación de Temperaturas ---
+    for (int i = 0; i < MAX_MODULES; ++i) {
+        for (int j = 0; j < SENSORS_PER_MODULE_TEMP; ++j) {
+            
+            TempExclusionPoint pointToCheck = { .idModule = i, .idNTC = j };
+
+            // Verificamos si el punto actual está en la lista de exclusión de temperaturas
+            if (tempExclusionList.find(pointToCheck) == tempExclusionList.end()) {
+                // NO está excluido: Procedemos a la validación
+                float currentTemp = stsTempCells[i][j];
+
+                if (currentTemp < MIN_VALID_TEMP || currentTemp > MAX_VALID_TEMP) {
+                    stsTempCellsFail[i][j] = true; // El valor está fuera de rango -> FALLA
+                } else {
+                    stsTempCellsFail[i][j] = false; // El valor está en rango -> OK
+                }
+            } else {
+                // SÍ está excluido: Lo marcamos como "no fallido" por defecto.
+                stsTempCellsFail[i][j] = false;
+            }
+        }
+    }
+}
 
 
 void readVoltages(bool &ok)
@@ -462,9 +504,9 @@ void readVoltages(bool &ok)
                 float cellVoltage = Complement(rawData,0.00019073);
                 //cellVoltage=4;
                 
-                if(cellVoltage >= 4.2 || cellVoltage<=2.5){
-                  ok=false;
-                }
+                // if(cellVoltage >= 4.2 || cellVoltage<=2.5){
+                //   ok=false;
+                // }
 
                 if(contVoltCells<11)
                 {
@@ -489,9 +531,9 @@ void readVoltages(bool &ok)
                // GPIOVoltage=1.08;
               // Serial.println((String)"GPIO " +(i/2)+" Voltage= " +GPIOVoltage);
                 float temp= voltToTemp(GPIOVoltage);
-                if(temp >= 60 ){
-                  ok=false;
-                }
+                // if(temp >= 60 ){
+                //   ok=false;
+                // }
                 if(contVoltNTC<9)
                 {
                   
@@ -504,7 +546,6 @@ void readVoltages(bool &ok)
                 //and it's +1 because cell names start with "Cell1"
               }
           }
-      
 }
 
 
@@ -594,4 +635,112 @@ void printVoltages()
           }
       }
 
+}
+
+
+void configBMS()
+{
+   Ini_ESP();
+  // while(!ok)
+  // {
+  //   Wake79606();
+  //   CommReset(BAUDRATE);
+  //   ok= AutoAddress();
+  // }
+
+  Serial.print("Addres: ");
+	delay(10);
+
+  int nCurrentBoard = 0;
+  byte response_frame[(MAXBYTES+6)];
+  byte response_frame2[(MAXBYTES+6)];
+    
+	for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
+    memset(response_frame2, 0, sizeof(response_frame2));
+    ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
+		Serial.print((String)"Board "+nCurrentBoard+"= ");
+
+    Serial.print(response_frame2[4]);
+
+		Serial.println(".");
+
+		delay(10);
+
+	}
+
+  InitDevices();
+
+  WriteReg(0, SYSFLT1_FLT_RST, 0xFFFFFF, 3, FRMWRT_ALL_NR);   //reset system faults
+  WriteReg(0, SYSFLT1_FLT_MSK, 0xFFFFFF, 3, FRMWRT_ALL_NR);
+  WriteReg(0, CONTROL2, 0x10, 1, FRMWRT_ALL_NR);          //tsref activo
+  
+  //SET UP MAIN ADC
+  WriteReg(0, CELL_ADC_CTRL, 0x3F, 1, FRMWRT_ALL_NR);     //enable conversions for all cells
+  WriteReg(0, CELL_ADC_CONF2, 0x08, 1, FRMWRT_ALL_NR);    //set continuous ADC conversions, and set minimum conversion interval
+
+  WriteReg(0, GPIO1_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+  WriteReg(0, GPIO2_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+  WriteReg(0, GPIO3_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+  WriteReg(0, GPIO4_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+  WriteReg(0, GPIO5_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+  WriteReg(0, GPIO6_CONF, 0x20, 1, FRMWRT_ALL_NR);       //GPIO is an input
+
+  WriteReg(0, AUX_ADC_CTRL1, 0xF0, 1, FRMWRT_ALL_NR);       //GPIO is an input
+  WriteReg(0, AUX_ADC_CTRL2, 0x03, 1, FRMWRT_ALL_NR);       //GPIO is an input
+
+
+  WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);          //CELL_ADC_GO = 1 Y tsref y AUX_ADC_GO = 1
+
+
+  delay(3*TOTALBOARDS+901);                             //3us of re-clocking delay per board + 901us waiting for first ADC conversion to complete
+}
+
+
+void setupExclusions() {
+    Serial.println("Configurando listas de exclusión...");
+    // Excluir sensor de voltaje del módulo 0, sensor 5
+    voltExclusionList.insert({.idModule = 0, .idVolt = 5});
+    // Excluir sensor de voltaje del módulo 2, sensor 10
+    voltExclusionList.insert({.idModule = 2, .idVolt = 10});
+
+    // Excluir sensor de temperatura del módulo 1, sensor 1
+    tempExclusionList.insert({.idModule = 1, .idNTC = 1});
+    Serial.printf("Exclusiones configuradas: %u de voltaje, %u de temperatura.\n", voltExclusionList.size(), tempExclusionList.size());
+}
+
+void populateTestData() {
+    Serial.println("Poblando arrays con datos de prueba...");
+    // Llenar todo con valores válidos por defecto
+    for (int i=0; i<MAX_MODULES; ++i) for (int j=0; j<SENSORS_PER_MODULE_VOLT; ++j) stsVoltCells[i][j] = 3.8f;
+    for (int i=0; i<MAX_MODULES; ++i) for (int j=0; j<SENSORS_PER_MODULE_TEMP; ++j) stsTempCells[i][j] = 25.0f;
+
+    // Insertar algunos valores que deberían fallar
+    stsVoltCells[0][2] = 2.9f;  // Falla (bajo voltaje)
+    stsVoltCells[1][8] = 4.5f;  // Falla (alto voltaje)
+    stsTempCells[0][0] = 70.0f; // Falla (alta temperatura)
+
+    // Insertar un valor fuera de rango en una posición EXCLUIDA
+    // Este NO debería aparecer como una falla.
+    stsVoltCells[0][5] = 1.5f; // Excluido, no debe fallar
+    stsTempCells[1][1] = 99.0f; // Excluido, no debe fallar
+}
+
+void printFailResults() {
+    Serial.println("\n--- Resultados de Fallas de Voltaje (1=FAIL, 0=OK) ---");
+    for (int i=0; i<MAX_MODULES; ++i) {
+        Serial.printf(" Modulo %02d: ", i);
+        for (int j=0; j<SENSORS_PER_MODULE_VOLT; ++j) {
+            Serial.print(stsVoltCellsFail[i][j]);
+        }
+        Serial.println();
+    }
+    
+    Serial.println("\n--- Resultados de Fallas de Temperatura (1=FAIL, 0=OK) ---");
+    for (int i=0; i<MAX_MODULES; ++i) {
+        Serial.printf(" Modulo %02d: ", i);
+        for (int j=0; j<SENSORS_PER_MODULE_TEMP; ++j) {
+            Serial.print(stsTempCellsFail[i][j]);
+        }
+        Serial.println();
+    }
 }
