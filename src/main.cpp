@@ -3,6 +3,12 @@
 #include "BQ79606.h"
 #include <MART_CAN.h>
 #include <set>
+#include <Adafruit_NeoPixel.h>
+
+//LED
+#define LED_PIN    48
+#define LED_COUNT 1
+Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 CAN_BUS CAN(HardwareType::Transciever, MCP_SPEED_500, 2, 10);
 
@@ -105,6 +111,7 @@ void setup()
   setupExclusions();
   printExclusionLists();
 
+  pixels.clear(); // Set all pixel colors to 'off'
 }
 
 void loop()
@@ -117,9 +124,12 @@ void loop()
   static bool stsFail = false;
   static float corrienteCarga = 0;
   static bool flagShow = false;
+  bool stsChargerOK=false;
+  
 
   CAN.receive();
   CAN.getPacket(idStsCharger, stsChargerByte, 8, false);
+  stsChargerOK= (stsChargerByte[4]==0);
 
   readVoltages(stsNumBytesOK);
   checkFails(stsVoltagesOK);
@@ -150,9 +160,8 @@ void loop()
     flagShow = 0;
   }
 
-  controlCharge(300, corrienteCarga, cmdCharge);
+  controlCharge(350, corrienteCarga, cmdCharge);
 
-  CAN.setPacket(idPrueba, cmdPrueba, 1);
   CAN.send();
 
   // MOSTRAR UNA SOLA VEZ POR SERIAL CADA VEZ QUE FALLE
@@ -166,18 +175,39 @@ void loop()
   if ((millis() - t) >= 1000)
   {
     // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
-    // showChargeData();
+   // showChargeData();
     // readVoltages(stsVoltagesOK);
     // CAN.printByteArray(stsChargerByte,8);
     // printVoltages();
     // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
     t = millis();
+   // CAN.printByteArray(stsChargerByte,8);
   }
 
   if (((millis() - t) >= 1000) && !stsFail)
   {
     // showChargeData();
   }
+
+
+  if(!stsChargerOK)
+  {
+    pixels.setPixelColor(0, pixels.Color(255, 0, 0));
+    pixels.show();   // Send the updated pixel colors to the hardware.
+  }
+  else if(stsChargerOK && !cmdCharge)
+  {
+    pixels.setPixelColor(0, pixels.Color(0, 0, 0));
+    pixels.show();   // Send the updated pixel colors to the hardware.
+  }
+  else if(stsChargerOK && cmdCharge)
+  {
+     pixels.setPixelColor(0, pixels.Color(0, 255, 0));
+    pixels.show();   // Send the updated pixel colors to the hardware.
+  }
+
+  
+    
 }
 
 void debug()
@@ -270,6 +300,13 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
 
       // --- Comando desconocido ---
     }
+    else if (comando == "d")
+    {
+       showChargeData();
+      // --- Comando desconocido ---
+    }
+
+   
     else if (comando.length() > 0)
     {
       Serial.print(F("-> ERROR: Comando desconocido: '"));
@@ -472,6 +509,7 @@ void controlCharge(float maxVolt, float maxCurrent, bool start)
   if (maxVolt > 500)
     maxVolt = 500;
   CAN.setPacket(idCmdCharger, cmdChargerByte, 8, false);
+  
 }
 
 /**
