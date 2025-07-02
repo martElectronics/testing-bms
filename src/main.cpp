@@ -27,7 +27,7 @@ void configBMS();
 void readVoltages(bool &ok);
 void printVoltages();
 float voltToTemp(float GPIOVoltage);
-void checkFails();
+void checkFails(bool &ok);
 
 void setupExclusions();
 void populateTestData();
@@ -61,8 +61,10 @@ std::set<TempExclusionPoint> tempExclusionList;
 //******CHARGE    */
 unsigned long idStsCharger=0x18FF50E5;
 unsigned long idCmdCharger=0x1806E5F4;
+unsigned long idPrueba=0x30;
 byte stsChargerByte[8];
 byte cmdChargerByte[8];
+byte cmdPrueba[8];
 void controlCharge(float maxVolt, float maxCurrent, bool start);
 void mostrarDatosDetallados();
 void showChargeData();
@@ -74,7 +76,7 @@ void setup() {
 
  bool ok=false;
  
-  //configBMS();
+  configBMS();
   Serial.begin(115200);
      while(CAN.error == 1){
       Serial.println("Error Initializing EScP32Can...");
@@ -83,11 +85,11 @@ void setup() {
 
  
 
-setupExclusions();
+   setupExclusions();
     populateTestData();
     
     Serial.println("\nEjecutando checkFails()...");
-    checkFails();
+   // checkFails();
     
     printFailResults();
     
@@ -98,39 +100,59 @@ setupExclusions();
 void loop() {
 
   static bool cmdCharge = false;
+  static bool stsNumBytesOK=false;
   static bool stsVoltagesOK=false;
   static bool cmdResetFail = false;
   static bool stsFail = false;
   static float corrienteCarga=0;
+  static bool flagShow=false;
 
   CAN.receive();
   CAN.getPacket(idStsCharger,stsChargerByte,8,false);
-  controlCharge(94,corrienteCarga,1);
-
-
   
-// printVoltages();
-  procesarComandoSerial(corrienteCarga,cmdCharge,cmdResetFail,stsVoltagesOK);
+  readVoltages(stsNumBytesOK);
+  checkFails(stsVoltagesOK);
+  procesarComandoSerial(corrienteCarga,cmdCharge,cmdResetFail,stsNumBytesOK);
 
-  if(!stsVoltagesOK)
+  bool failCondition = !(stsVoltagesOK && stsNumBytesOK);
+  failCondition=false;
+
+  if(failCondition)
   {
     stsFail=1;
   }
-  else if(stsVoltagesOK && cmdResetFail)
+  else if(!failCondition && cmdResetFail)
   {
     cmdResetFail=false;
     stsFail=0;
   }
   
+
   if(stsFail)
   {
     cmdCharge=0;
-   // corrienteCarga=0;
+    corrienteCarga=0;
+    //digitalWrite(BMS_OK, false);
   }
+  else
+  {
+    digitalWrite(BMS_OK, true);
+    flagShow=0;
+  }
+   
+  controlCharge(300,corrienteCarga,cmdCharge);
 
+
+    CAN.setPacket(idPrueba,cmdPrueba,1);
    CAN.send();
-   //printVoltages();
-   //Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
+
+   //MOSTRAR UNA SOLA VEZ POR SERIAL CADA VEZ QUE FALLE
+    if (stsFail && !flagShow)
+    {
+      printFailResults();
+      flagShow=1;
+    }
+   
 
    static int t=millis();
    if((millis()-t)>=1000)
@@ -139,10 +161,17 @@ void loop() {
       //showChargeData();
      // readVoltages(stsVoltagesOK);
      //CAN.printByteArray(stsChargerByte,8);
+     //printVoltages();
+   //Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
+    t=millis();
+   }
+
+   if(((millis()-t)>=1000) && !stsFail)
+   {
+    // showChargeData();
    }
 
 digitalWrite(BMS_OK, true);
-
 
 
 }
@@ -216,6 +245,8 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       Serial.print(comando);
       Serial.println(F("'"));
     }
+
+    Serial.println("i = mostrar datos módulos, f= forzar fallo, r=reset fallo");
   }
 }
 
@@ -370,25 +401,25 @@ void controlCharge(float maxVolt, float maxCurrent, bool start) {
         volt_low_byte = 0x00;
         curr_high_byte = 0x00;
         curr_low_byte = 0x00;
-        return;
+    }
+    else
+    {
+      const float VOLTAGE_SCALING_FACTOR = 10.0f;
+      uint16_t scaled_voltage = static_cast<uint16_t>(maxVolt * VOLTAGE_SCALING_FACTOR);
+
+      volt_high_byte = (scaled_voltage >> 8) & 0xFF; // Right shift by 8 bits to get the MSB
+      volt_low_byte = scaled_voltage & 0xFF;         // AND with 0xFF to get the LSB
+
+      const float CURRENT_SCALING_FACTOR = 10.0f;
+      uint16_t scaled_current = static_cast<uint16_t>(maxCurrent * CURRENT_SCALING_FACTOR);
+
+      // Extract the high and low bytes from the 16-bit scaled current.
+      curr_high_byte = (scaled_current >> 8) & 0xFF;
+      curr_low_byte = scaled_current & 0xFF;
+
+      byte cmdChargerByte[8];
     }
 
-    const float VOLTAGE_SCALING_FACTOR = 10.0f;
-    uint16_t scaled_voltage = static_cast<uint16_t>(maxVolt * VOLTAGE_SCALING_FACTOR);
-
-    
-    volt_high_byte = (scaled_voltage >> 8) & 0xFF; // Right shift by 8 bits to get the MSB
-    volt_low_byte = scaled_voltage & 0xFF;        // AND with 0xFF to get the LSB
-
-    const float CURRENT_SCALING_FACTOR = 10.0f;
-    uint16_t scaled_current = static_cast<uint16_t>(maxCurrent * CURRENT_SCALING_FACTOR);
-
-    // Extract the high and low bytes from the 16-bit scaled current.
-    curr_high_byte = (scaled_current >> 8) & 0xFF;
-    curr_low_byte = scaled_current & 0xFF;
-
-
-   byte cmdChargerByte[8];
   for(int i=0;i<8;i++)
   {
    cmdChargerByte[i]=0x00;
@@ -399,8 +430,9 @@ void controlCharge(float maxVolt, float maxCurrent, bool start) {
   cmdChargerByte[3]=curr_low_byte;
   cmdChargerByte[4]=(byte)!start;
 
-   CAN.setPacket(23,cmdChargerByte,8,false);
-   Serial.println("AAA");
+
+    if(maxVolt>500) maxVolt=500;
+    CAN.setPacket(idCmdCharger,cmdChargerByte,8,false);
 
 }
 
@@ -408,7 +440,8 @@ void controlCharge(float maxVolt, float maxCurrent, bool start) {
  * @brief Recorre los arrays de lecturas, las valida contra márgenes
  * y actualiza los arrays de fallas, respetando las listas de exclusión.
  */
-void checkFails() {
+void checkFails(bool &ok) {
+  ok=true;
     // --- 1. Comprobación de Voltajes ---
     for (int i = 0; i < MAX_MODULES; ++i) {
         for (int j = 0; j < SENSORS_PER_MODULE_VOLT; ++j) {
@@ -422,6 +455,7 @@ void checkFails() {
                 
                 if (currentVoltage < MIN_VALID_VOLTAGE || currentVoltage > MAX_VALID_VOLTAGE) {
                     stsVoltCellsFail[i][j] = true; // El valor está fuera de rango -> FALLA
+                    ok=false;
                 } else {
                     stsVoltCellsFail[i][j] = false; // El valor está en rango -> OK
                 }
@@ -446,6 +480,7 @@ void checkFails() {
 
                 if (currentTemp < MIN_VALID_TEMP || currentTemp > MAX_VALID_TEMP) {
                     stsTempCellsFail[i][j] = true; // El valor está fuera de rango -> FALLA
+                    ok=false;
                 } else {
                     stsTempCellsFail[i][j] = false; // El valor está en rango -> OK
                 }
@@ -640,13 +675,14 @@ void printVoltages()
 
 void configBMS()
 {
+  bool ok=false;
    Ini_ESP();
-  // while(!ok)
-  // {
-  //   Wake79606();
-  //   CommReset(BAUDRATE);
-  //   ok= AutoAddress();
-  // }
+  while(!ok)
+  {
+    Wake79606();
+    CommReset(BAUDRATE);
+    ok= AutoAddress();
+  }
 
   Serial.print("Addres: ");
 	delay(10);
