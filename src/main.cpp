@@ -141,9 +141,11 @@ void loop()
   CAN.getPacket(idStsCharger, stsChargerByte, 8, false);
   stsChargerOK = (stsChargerByte[4] == 0);
 
-  int resReadVoltages=readVoltages2(stsNumBytesOK);
+ 
   int adcCurrentValue=analogRead(PIN_CURRENT_1);
   stsCorrienteCarga=sensor1.calcularCorrienteS1(adcCurrentValue);
+
+   int resReadVoltages=readVoltages2(stsNumBytesOK);
   if(resReadVoltages==0)
   {
     checkFails(stsVoltagesOK);
@@ -284,6 +286,23 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     }
     else if (comando == "i")
     {
+      bool stsNumBytesOK;
+      bool stsVoltagesOK;
+      int resReadVoltages = readVoltages2(stsNumBytesOK);
+      if (resReadVoltages == 0)
+      {
+        checkFails(stsVoltagesOK);
+      }
+      else if (resReadVoltages == 1)
+      {
+        numCRCFails++;
+        Serial.println("CRC error");
+      }
+      else
+      {
+        Serial.println("Read error");
+      }
+
       mostrarDatosDetallados();
     }
     else if (comando == "l")
