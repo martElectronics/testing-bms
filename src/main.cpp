@@ -4,9 +4,10 @@
 #include <MART_CAN.h>
 #include <set>
 #include <Adafruit_NeoPixel.h>
+#include "SensorCorriente.cpp"
 
-//LED
-#define LED_PIN    48
+// LED
+#define LED_PIN 48
 #define LED_COUNT 1
 Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -19,6 +20,9 @@ const int SENSORS_PER_MODULE_VOLT = 11;
 const int SENSORS_PER_MODULE_TEMP = 9;
 float stsVoltCells[12][11];
 float stsTempCells[12][9];
+
+unsigned int numCRCFails = 0;
+
 // --- Arrays de Resultados (Fallas) ---
 bool stsVoltCellsFail[MAX_MODULES][SENSORS_PER_MODULE_VOLT];
 bool stsTempCellsFail[MAX_MODULES][SENSORS_PER_MODULE_TEMP];
@@ -26,11 +30,12 @@ bool stsTempCellsFail[MAX_MODULES][SENSORS_PER_MODULE_TEMP];
 // --- Márgenes Parametrizables ---
 const float MIN_VALID_VOLTAGE = 2.8f;
 const float MAX_VALID_VOLTAGE = 4.2f;
-const float MIN_VALID_TEMP = 20.0f;
+const float MIN_VALID_TEMP = 5.0f;
 const float MAX_VALID_TEMP = 60.0f;
 
 void configBMS();
 void readVoltages(bool &ok);
+int readVoltages2(bool &ok);
 void printVoltages();
 float voltToTemp(float GPIOVoltage);
 void checkFails(bool &ok);
@@ -77,6 +82,11 @@ unsigned long idPrueba = 0x30;
 byte stsChargerByte[8];
 byte cmdChargerByte[8];
 byte cmdPrueba[8];
+const int PIN_CURRENT_1 = 14;
+SensorCorriente sensor1;
+float stsCorrienteCarga=0;
+
+
 void controlCharge(float maxVolt, float maxCurrent, bool start);
 void mostrarDatosDetallados();
 void showChargeData();
@@ -108,7 +118,7 @@ void setup()
   readVoltages(okk);
   checkFails(okk);
   printFailResults();
-  setupExclusions();
+  //setupExclusions();
   printExclusionLists();
 
   pixels.clear(); // Set all pixel colors to 'off'
@@ -124,19 +134,30 @@ void loop()
   static bool stsFail = false;
   static float corrienteCarga = 0;
   static bool flagShow = false;
-  bool stsChargerOK=false;
-  
+  bool stsChargerOK = false;
+
 
   CAN.receive();
   CAN.getPacket(idStsCharger, stsChargerByte, 8, false);
-  stsChargerOK= (stsChargerByte[4]==0);
+  stsChargerOK = (stsChargerByte[4] == 0);
 
-  readVoltages(stsNumBytesOK);
-  checkFails(stsVoltagesOK);
+  int resReadVoltages=readVoltages2(stsNumBytesOK);
+  int adcCurrentValue=analogRead(PIN_CURRENT_1);
+  stsCorrienteCarga=sensor1.calcularCorrienteS1(adcCurrentValue);
+  if(resReadVoltages==0)
+  {
+    checkFails(stsVoltagesOK);
+  }
+  else if(resReadVoltages==1)
+  {
+    numCRCFails++;
+    Serial.println("CRC error");
+  }
+
   procesarComandoSerial(corrienteCarga, cmdCharge, cmdResetFail, stsNumBytesOK);
 
   bool failCondition = !(stsVoltagesOK && stsNumBytesOK);
- // failCondition = false;
+  // failCondition = false;
 
   if (failCondition)
   {
@@ -175,13 +196,13 @@ void loop()
   if ((millis() - t) >= 1000)
   {
     // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
-   // showChargeData();
+    // showChargeData();
     // readVoltages(stsVoltagesOK);
     // CAN.printByteArray(stsChargerByte,8);
     // printVoltages();
     // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
     t = millis();
-   // CAN.printByteArray(stsChargerByte,8);
+    // CAN.printByteArray(stsChargerByte,8);
   }
 
   if (((millis() - t) >= 1000) && !stsFail)
@@ -189,25 +210,21 @@ void loop()
     // showChargeData();
   }
 
-
-  if(!stsChargerOK)
+  if (!stsChargerOK)
   {
     pixels.setPixelColor(0, pixels.Color(255, 0, 0));
-    pixels.show();   // Send the updated pixel colors to the hardware.
+    pixels.show(); // Send the updated pixel colors to the hardware.
   }
-  else if(stsChargerOK && !cmdCharge)
+  else if (stsChargerOK && !cmdCharge)
   {
     pixels.setPixelColor(0, pixels.Color(0, 0, 0));
-    pixels.show();   // Send the updated pixel colors to the hardware.
+    pixels.show(); // Send the updated pixel colors to the hardware.
   }
-  else if(stsChargerOK && cmdCharge)
+  else if (stsChargerOK && cmdCharge)
   {
-     pixels.setPixelColor(0, pixels.Color(0, 255, 0));
-    pixels.show();   // Send the updated pixel colors to the hardware.
+    pixels.setPixelColor(0, pixels.Color(0, 255, 0));
+    pixels.show(); // Send the updated pixel colors to the hardware.
   }
-
-  
-    
 }
 
 void debug()
@@ -302,11 +319,10 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     }
     else if (comando == "d")
     {
-       showChargeData();
+      showChargeData();
       // --- Comando desconocido ---
     }
 
-   
     else if (comando.length() > 0)
     {
       Serial.print(F("-> ERROR: Comando desconocido: '"));
@@ -321,19 +337,6 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
 void mostrarDatosDetallados()
 {
 
-  // randomSeed(analogRead(4));
-  //  for (int i = 0; i < TOTALBOARDS/2; i++) {
-  //    for (int j = 0; j < 11; j++)
-  //    stsVoltCells[i][j] = 3.9;//random(320, 415) / 100.0;
-  //  }
-  //  for (int i = 0; i < TOTALBOARDS/2; i++) {
-  //    for (int j = 0; j < 9; j++)
-  //    stsTempCells[i][j] = 1.08;//random(250, 450) / 10.0;
-  //  }
-  //  stsVoltCells[2][5] = 3.15;
-  //  stsVoltCells[8][1] = 4.21;
-  //  stsTempCells[10][3] = 22.5;
-  //  stsTempCells[4][7] = 51.2;
 
   Serial.println(F("\n--- Vista Detallada por Modulo ---")); // F() macro ahorra RAM
   Serial.println(F("Modulo | Voltajes (V)                  | Temperaturas (C)"));
@@ -453,6 +456,8 @@ void showChargeData()
   Serial.print("V | T_media:");
   Serial.print(tempMedia, 2);
   Serial.println("C");
+
+  Serial.println((String)"Charge Current :" +stsCorrienteCarga);
 }
 
 float voltToTemp(float GPIOVoltage)
@@ -509,7 +514,6 @@ void controlCharge(float maxVolt, float maxCurrent, bool start)
   if (maxVolt > 500)
     maxVolt = 500;
   CAN.setPacket(idCmdCharger, cmdChargerByte, 8, false);
-  
 }
 
 /**
@@ -585,9 +589,111 @@ void checkFails(bool &ok)
   }
 }
 
-void readVoltages(bool &ok)
+// Returns 0 if ok, -1 if crc ok and voltage fail, 1 if crc fail
+int readVoltages2(bool &ok)
 {
-  int t=millis();
+  int t = millis();
+  ok = true;
+  int returnValue = 0;
+  // VARIABLES
+  byte response_frame[(MAXBYTES + 6)];
+  byte response_frame2[(MAXBYTES + 6)];
+  int currentBoard = 0;
+  int res1 = 0, res2 = 0;
+  int i = 0;
+  int contVoltCells = 0, contVoltNTC = 0, idModule = 0;
+  // reset variables
+  memset(response_frame, 0, sizeof(response_frame));
+  i = 0;
+  currentBoard = 0;
+  WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);
+  delay(100);
+
+  // PARSE, FORMAT, AND PRINT THE DATA
+  for (currentBoard = 0; currentBoard < TOTALBOARDS; currentBoard++)
+  {
+    idModule = currentBoard / 2;
+    memset(response_frame, 0, sizeof(response_frame));
+    memset(response_frame2, 0, sizeof(response_frame));
+
+    // read back data (6 cells and 2 bytes each cell)
+    res1 = ReadReg(currentBoard, VCELL1H, response_frame, MAXBYTES, 0, FRMWRT_SGL_R);
+    res2 = ReadReg(currentBoard, AUX_GPIO1H, response_frame2, MAXBYTES, 0, FRMWRT_SGL_R);
+    bool okCRC = false;
+    bool okCRC2 = false;
+
+    if ((res1 <= 0) || (res2 <= 0))
+    { // Fallo de lectura
+      ok = false;
+      returnValue = -1;
+    }
+    else
+    {
+      okCRC = CheckCRC(response_frame, sizeof(response_frame));
+      okCRC2 = CheckCRC(response_frame2, sizeof(response_frame2));
+      if (!okCRC || !okCRC2)
+      {
+        // CRC incorrecto
+        ok = false;
+        returnValue = 1;
+      }
+      else
+      {
+        // *********************** CRC correcto
+        //  Cambio al módulo siguiente, reset de contadores
+        if ((currentBoard % 2) == 0)
+        {
+          contVoltCells = 0;
+          contVoltNTC = 0;
+        }
+        // response frame actually starts with top of stack, so currentBoard is actually inverted from what it should be
+        // go through each byte in the current board (12 bytes = 6 cells * 2 bytes each)
+        for (i = 0; i < 12; i += 2)
+        {
+          uint16_t rawData = (response_frame[i + 4] << 8) | response_frame[i + 5];
+          float cellVoltage = Complement(rawData, 0.00019073);
+          if (contVoltCells < 11)
+          {
+            stsVoltCells[idModule][contVoltCells] = cellVoltage;
+            contVoltCells++;
+          }
+        }
+
+        // go through each byte in the current board (12 bytes = 6 GPIO * 2 bytes each)
+        for (i = 0; i < 12; i += 2)
+        {
+          // each board responds with 32 data bytes + 6 header bytes
+
+          // convert the two individual bytes of each cell into a single 16 bit data item (by bit shifting)
+          uint16_t rawData = (response_frame2[i + 4] << 8) | response_frame2[i + 5];
+
+          // do the two's complement of the resultant 16 bit data item, and multiply by 190.73uV to get an actual voltage
+          float GPIOVoltage = Complement(rawData, 0.00019073);
+          // GPIOVoltage=1.08;
+          // Serial.println((String)"GPIO " +(i/2)+" Voltage= " +GPIOVoltage);
+          float temp = voltToTemp(GPIOVoltage);
+          // if(temp >= 60 ){
+          //   ok=false;
+          // }
+          if (contVoltNTC < 9)
+          {
+
+            // Serial.println(contVoltNTC);
+            stsTempCells[idModule][contVoltNTC] = temp;
+            contVoltNTC++;
+          }
+        }
+      }
+    }
+  }
+  int tTotal = millis() - t;
+  return returnValue;
+}
+
+void readVoltages(bool &ok)
+
+{
+  int t = millis();
   ok = true;
   // VARIABLES
   byte response_frame[(MAXBYTES + 6)];
@@ -672,9 +778,8 @@ void readVoltages(bool &ok)
     }
   }
 
-  int tTotal=millis()-t;
-  //Serial.println(tTotal);
-
+  int tTotal = millis() - t;
+  // Serial.println(tTotal);
 }
 
 void printVoltages()
@@ -900,6 +1005,7 @@ void printFailResults()
   }
   Serial.println((String) "Total fallos tension = " + contFallosTension);
   Serial.println((String) "Total fallos temperatura = " + contFallosTemp);
+  Serial.println((String) "Total fallos CRC = " + numCRCFails);
 }
 
 void printExclusionLists()

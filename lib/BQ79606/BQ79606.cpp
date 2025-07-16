@@ -632,3 +632,11 @@ void InitDevices() {
     delay(2);
 //end init sequence
 }
+
+// Verificación de CRC
+bool CheckCRC(uint8_t* data, uint16_t len) {
+    if (len < 2) return false;//Si la longitud es menor que 2 no hay espacio para el CRC
+    uint16_t crcReceived = ((uint16_t)data[len - 1] << 8) | data[len - 2]; //Extrae el CRC recibido (ultimos 2 bytes)
+    uint16_t crcCalc = CRC16(data, len - 2); //Calcula el CRC que debería tener la trama
+    return crcReceived == crcCalc;
+}
