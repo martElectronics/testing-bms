@@ -6,6 +6,7 @@
 #include <Adafruit_NeoPixel.h>
 #include "SensorCorriente.cpp"
 
+
 // LED
 #define LED_PIN 48
 #define LED_COUNT 1
@@ -126,10 +127,12 @@ void setup()
 
 void loop()
 {
-
+  unsigned long int tTotal=millis();
   static bool cmdCharge = false;
   static bool stsNumBytesOK = false;
   static bool stsVoltagesOK = false;
+  static bool stsStartCharge = false;
+  static bool stsAMPOK = false;
   static bool cmdResetFail = false;
   static bool stsFail = false;
   static float corrienteCarga = 0;
@@ -140,10 +143,13 @@ void loop()
   CAN.receive();
   CAN.getPacket(idStsCharger, stsChargerByte, 8, false);
   stsChargerOK = (stsChargerByte[4] == 0);
+  stsStartCharge=!digitalRead(START_PIN);
 
  
-  int adcCurrentValue=analogRead(PIN_CURRENT_1);
+  int adcCurrentValue=analogRead(AMP_PIN);
   stsCorrienteCarga=sensor1.calcularCorrienteS1(adcCurrentValue);
+  stsAMPOK=(sensor1.getVoltaje(adcCurrentValue)>0.5);
+ // stsAMPOK=true;
 
    int resReadVoltages=readVoltages2(stsNumBytesOK);
   if(resReadVoltages==0)
@@ -158,18 +164,21 @@ void loop()
 
   procesarComandoSerial(corrienteCarga, cmdCharge, cmdResetFail, stsNumBytesOK);
 
-  bool failCondition = !(stsVoltagesOK && stsNumBytesOK);
+  bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
+  //failCondition=false;
   // failCondition = false;
 
-  if (failCondition)
-  {
-    stsFail = 1;
-  }
-  else if (!failCondition && cmdResetFail)
-  {
-    cmdResetFail = false;
-    stsFail = 0;
-  }
+  // if (failCondition)
+  // {
+  //   stsFail = 1;
+  // }
+  // else if (!failCondition && cmdResetFail)
+  // {
+  //   cmdResetFail = false;
+  //   stsFail = 0;
+  // }
+  stsFail=failCondition;
+  //stsFail=0;
 
   if (stsFail)
   {
@@ -204,6 +213,11 @@ void loop()
     // printVoltages();
     // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
     t = millis();
+    //bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
+    //  Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK +" stsAMPOK= "+stsAMPOK);
+     //Serial.println((String)"Adc current value= "+adcCurrentValue+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
+    // Serial.println((String)"start_charge"+stsStartCharge);
+     //Serial.println((String)"FAIL: "+ stsFail);
     // CAN.printByteArray(stsChargerByte,8);
   }
 
@@ -227,6 +241,9 @@ void loop()
     pixels.setPixelColor(0, pixels.Color(0, 255, 0));
     pixels.show(); // Send the updated pixel colors to the hardware.
   }
+ // CAN.printReceivedIds();
+  //CAN.printByteArray(stsChargerByte,8);
+ // Serial.println(millis()-tTotal);
 }
 
 void debug()

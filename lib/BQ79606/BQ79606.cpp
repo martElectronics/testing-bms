@@ -43,7 +43,8 @@ void Ini_ESP(){
 
 	//Fault pin Inicialization
 	pinMode(Fault_pin, INPUT);
-
+	pinMode(AMP_PIN, INPUT);
+	pinMode(START_PIN, INPUT_PULLUP);
     //UART inicilization
     Serial.begin(115200);
 	//BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);

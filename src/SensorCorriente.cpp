@@ -5,7 +5,7 @@ class SensorCorriente{
     private:
     int valorADC;
     float voltage;
-    const float VOLTAJE_REPOSO = 2.46;
+    const float VOLTAJE_REPOSO = 2.5;
     const float S1_SENSITIVITY = 0.0667;
     const float S2_SENSITIVITY = 0.0057;
     const float DEFAULT_VOLTAJE = 3.36; //Valor máximo de la tensión en la salida 
