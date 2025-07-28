@@ -99,6 +99,7 @@ void setup()
   bool ok = false;
 
   configBMS();
+  digitalWrite(BMS_OK, true);
   while (CAN.error == 1)
   {
     Serial.println("Error Initializing EScP32Can...");
@@ -184,7 +185,7 @@ void loop()
   {
     cmdCharge = 0;
     corrienteCarga = 0;
-    digitalWrite(BMS_OK, false);
+   // digitalWrite(BMS_OK, false);
   }
   else
   {
@@ -219,6 +220,7 @@ void loop()
     // Serial.println((String)"start_charge"+stsStartCharge);
      //Serial.println((String)"FAIL: "+ stsFail);
     // CAN.printByteArray(stsChargerByte,8);
+    Serial.println(t);
   }
 
   if (((millis() - t) >= 1000) && !stsFail)
@@ -309,6 +311,7 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       if (resReadVoltages == 0)
       {
         checkFails(stsVoltagesOK);
+         mostrarDatosDetallados();
       }
       else if (resReadVoltages == 1)
       {
@@ -320,7 +323,7 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
         Serial.println("Read error");
       }
 
-      mostrarDatosDetallados();
+     
     }
     else if (comando == "l")
     {
@@ -356,6 +359,13 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     else if (comando == "d")
     {
       showChargeData();
+      // --- Comando desconocido ---
+    }
+
+    else if (comando == "a")
+    {
+      Serial.println("AAAAAAAAAAAA");
+      configBMS();
       // --- Comando desconocido ---
     }
 
@@ -643,7 +653,7 @@ int readVoltages2(bool &ok)
   i = 0;
   currentBoard = 0;
   WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);
-  delay(100);
+  
 
   // PARSE, FORMAT, AND PRINT THE DATA
   for (currentBoard = 0; currentBoard < TOTALBOARDS; currentBoard++)

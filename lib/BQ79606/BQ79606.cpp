@@ -164,25 +164,26 @@ void CommReset(int BAUD) {
 //**********************
 bool AutoAddress()
 {
+	int t=20;
     memset(response_frame2,0,sizeof(response_frame2)); //clear out the response frame buffer
 
     //dummy write to ECC_TEST (sync DLL)
     WriteReg(0,  ECC_TEST, 0x00, 1, FRMWRT_ALL_NR);
-	delay(100);
+	delay(t);
 
 	//clear CONFIG in case it is set
     WriteReg(0, CONFIG, 0x00, 1, FRMWRT_ALL_NR);
-	delay(100);
+	delay(t);
 
     //enter auto addressing mode
     WriteReg(0, CONTROL1, 0x01, 1, FRMWRT_ALL_NR);
-	delay(100);
+	delay(t);
 
     //set addresses for all boards in daisy-chain
     for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++)
     {
         WriteReg(0, DEVADD_USR, nCurrentBoard, 1, FRMWRT_ALL_NR);
-		delay(100);
+		delay(t);
     }
 
 
@@ -192,7 +193,7 @@ bool AutoAddress()
     if(TOTALBOARDS==1)
     {
         WriteReg(0, CONFIG, 0x01, 1, FRMWRT_SGL_NR);	//Base and top device
-		delay(100);
+		delay(t);
     }
     //otherwise set the base and top of stack individually
     else
@@ -202,11 +203,12 @@ bool AutoAddress()
 		for (nCurrentBoard = 1; nCurrentBoard < (TOTALBOARDS-1); nCurrentBoard++)
     	{
         	WriteReg(nCurrentBoard, CONFIG, 0x02, 1, FRMWRT_SGL_NR); //Stack
-			delay(100);
+			delay(t);
+			Serial.println((String)"Setting "+ nCurrentBoard);
     	}
 		
         WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR); //top of stack
-		delay(100);
+		delay(t);
     }
 
 
@@ -214,17 +216,18 @@ bool AutoAddress()
     {
         //dummy read from ECC_TEST (sync DLL)
     	ReadReg(nCurrentBoard, ECC_TEST, response_frame2, 1, 0, FRMWRT_SGL_R);
-		delay(100);
+		delay(t);
+		Serial.println((String)"Getting "+ nCurrentBoard);
     }
 
     
 
 	WriteReg(0, DAISY_CHAIN_CTRL, 0x0D, 1, FRMWRT_SGL_NR);  //base
-	delay(100);
+	delay(t);
 	WriteReg(1, COMM_CTRL, 0x04, 1, FRMWRT_STK_NR);  //stack
-	delay(100);
+	delay(t);
 	WriteReg((TOTALBOARDS - 1), DAISY_CHAIN_CTRL, 0x32, 1, FRMWRT_SGL_NR);  //Top
-	delay(100);
+	delay(t);
 
 
 
@@ -381,6 +384,9 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
 	byte recibido [64];
 	int Reciving_Len = 0;
 
+	unsigned long int timeRead=millis();
+	unsigned long int timeoutMS=50;
+
 	if(bWriteType == FRMWRT_SGL_R){
 		Reciving_Len = (bLen + 6);
 	}
@@ -403,16 +409,30 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
 		//timerStart(Reciving_Timeout);				//Timer timeout start
 
 		int Time = 0;
+		int maxTime=100;
 		//Waiting firts byte, If not reciving the first byte in 1 second send and error
-		while((BMS_UART.available() == 0) && (Time < 10)){
-			delay(5);
-			Time ++;
-			if(Time == 10){
-				Serial.println("Se ha excedido el tiempo de lectura");
-				bRes = -1;		//Timeout error
+		// while((BMS_UART.available() == 0) && (Time < maxTime)){
+		// 	delay(5);
+		// 	Time ++;
+			
+		// 	if(Time == maxTime){
+		// 		Serial.println((String)"Exec");
+		// 		bRes = -1;		//Timeout error
+		// 	}
+		// }
+		// 	Time = 0;
+
+		while(   (BMS_UART.available() == 0) &&   (millis()-timeRead)<=timeoutMS)   {
+			
+				
 			}
+		if((millis()-timeRead)>=timeoutMS)
+		{
+			bRes = -1;		//Timeout erro
 		}
-			Time = 0;
+
+
+			
 		//timerStop(Reciving_Timeout);	//Timer Timeout Stop
 		//timerRestart(Reciving_Timeout);	//Timer Timeout Reset counter value
 
