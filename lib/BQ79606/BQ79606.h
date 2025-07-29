@@ -5,7 +5,7 @@
 
 
 // User defines
-#define TOTALBOARDS 24    //MUST SET: total boards in the stack
+#define TOTALBOARDS 2    //MUST SET: total boards in the stack
 #define BAUDRATE  1000000    //set global baudrate   //a 500000 tarda 340ms en leer todas las tensiones
 #define MAXBYTES  6*2        //6 CELLS, 2 byteS EACH
 #define Wake_pin  7         //Wake up pin number in ESP32 (4 original)
@@ -508,6 +508,7 @@ int  WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteTy
 int  ReadFrameReq(byte bID, uint16_t wAddr, byte bByteToReturn,byte bWriteType);
 
 bool CheckCRC(uint8_t* data, uint16_t len);
-
+uint16_t bq79606_calculate_crc(const uint8_t *pBuf, int nLen);
+bool bq79606_verify_crc(const uint8_t *received_frame, int frame_length);
 
 #endif

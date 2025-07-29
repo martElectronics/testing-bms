@@ -220,7 +220,7 @@ void loop()
     // Serial.println((String)"start_charge"+stsStartCharge);
      //Serial.println((String)"FAIL: "+ stsFail);
     // CAN.printByteArray(stsChargerByte,8);
-    Serial.println(t);
+   // Serial.println(t);
   }
 
   if (((millis() - t) >= 1000) && !stsFail)

@@ -409,27 +409,27 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
 		//timerStart(Reciving_Timeout);				//Timer timeout start
 
 		int Time = 0;
-		int maxTime=100;
+		int maxTime=50;
 		//Waiting firts byte, If not reciving the first byte in 1 second send and error
-		// while((BMS_UART.available() == 0) && (Time < maxTime)){
-		// 	delay(5);
-		// 	Time ++;
+		while((BMS_UART.available() == 0) && (Time < maxTime)){
+			delay(5);
+			Time ++;
 			
-		// 	if(Time == maxTime){
-		// 		Serial.println((String)"Exec");
-		// 		bRes = -1;		//Timeout error
-		// 	}
-		// }
-		// 	Time = 0;
+			if(Time == maxTime){
+				Serial.println((String)"Exec");
+				bRes = -1;		//Timeout error
+			}
+		}
+			Time = 0;
 
-		while(   (BMS_UART.available() == 0) &&   (millis()-timeRead)<=timeoutMS)   {
+		// while(   (BMS_UART.available() == 0) &&   (millis()-timeRead)<=timeoutMS)   {
 			
 				
-			}
-		if((millis()-timeRead)>=timeoutMS)
-		{
-			bRes = -1;		//Timeout erro
-		}
+		// 	}
+		// if((millis()-timeRead)>=timeoutMS)
+		// {
+		// 	bRes = -1;		//Timeout erro
+		// }
 
 
 			
@@ -660,4 +660,50 @@ bool CheckCRC(uint8_t* data, uint16_t len) {
     uint16_t crcReceived = ((uint16_t)data[len - 1] << 8) | data[len - 2]; //Extrae el CRC recibido (ultimos 2 bytes)
     uint16_t crcCalc = CRC16(data, len - 2); //Calcula el CRC que debería tener la trama
     return crcReceived == crcCalc;
+}
+
+
+/**
+ * @brief Calculates the CRC for BQ79606A-Q1 communication frames.
+ *
+ * @note This is a direct adaptation of the `CRC16` function from the official
+ * Texas Instruments sample code (sluc682/source/bq79606.c). It correctly
+ * generates the CRC values for all examples in the software reference guide.
+ *
+ * @param pBuf Pointer to the data array.
+ * @param nLen The number of bytes in the data array.
+ * @return The calculated 16-bit CRC value.
+ */
+uint16_t bq79606_calculate_crc(const uint8_t *pBuf, int nLen) {
+    uint16_t wCRC = 0xFFFF;
+    int i;
+
+    for (i = 0; i < nLen; i++) {
+        wCRC = crc16_table[(wCRC ^ pBuf[i]) & 0xFF] ^ (wCRC >> 8);
+    }
+
+    // The TI sample code has a byte-swapped CRC compared to the documentation.
+    // The documentation examples are correct, so we must swap the bytes of the result.
+    return (wCRC >> 8) | (wCRC << 8);
+}
+
+/**
+ * @brief Verifies the CRC of a received frame from the BQ79606A-Q1.
+ *
+ * @param received_frame Pointer to the complete received frame (data + CRC).
+ * @param frame_length The total length of the received frame in bytes.
+ * @return True if the CRC is correct, false otherwise.
+ */
+bool bq79606_verify_crc(const uint8_t *received_frame, int frame_length) {
+    if (frame_length < 2) {
+        return false; // Frame is too short
+    }
+    
+    // To verify, we calculate the CRC on the data part only...
+    uint16_t calculated_crc = bq79606_calculate_crc(received_frame, frame_length - 2);
+    
+    // ...and compare it to the received CRC bytes.
+    uint16_t received_crc = ((uint16_t)received_frame[frame_length - 2] << 8) | received_frame[frame_length - 1];
+
+    return (calculated_crc == received_crc);
 }
