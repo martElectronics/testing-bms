@@ -5,8 +5,8 @@ class SensorCorriente{
     private:
     int valorADC;
     float voltage;
-    const float VOLTAJE_REPOSO = 2.5;
-    const float S1_SENSITIVITY = 0.0667;
+    const double VOLTAJE_REPOSO = 0.847590;
+    const double S1_SENSITIVITY = 9.238754325; //26.7 mv/A la de 75A  26.7mv/2.89
     const float S2_SENSITIVITY = 0.0057;
     const float DEFAULT_VOLTAJE = 3.36; //Valor máximo de la tensión en la salida 
     const float MAX_ADC_VALUE = 4095.0; //Valor entero máximo que puede leerse en la salida
@@ -28,9 +28,14 @@ class SensorCorriente{
     }
     
     //Calcular la corriente de la salida 1
-    float calcularCorrienteS1(int adc){
-        getVoltaje(adc);
-        return (voltage - VOLTAJE_REPOSO) / S1_SENSITIVITY;
+    double calcularCorrienteS1(int adc){
+        double sum=0;
+        for(int i=0;i<10;i++)
+        {
+        sum+=getVoltaje(adc);
+        delay(1);
+        }
+        return (sum/10 - VOLTAJE_REPOSO)/ (S1_SENSITIVITY/1000);
     }
 
     //Calcular la corriente de la salida 2

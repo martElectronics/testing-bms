@@ -23,6 +23,7 @@ float stsVoltCells[12][11];
 float stsTempCells[12][9];
 
 unsigned int numCRCFails = 0;
+ bool holdBMSOK=false;
 
 // --- Arrays de Resultados (Fallas) ---
 bool stsVoltCellsFail[MAX_MODULES][SENSORS_PER_MODULE_VOLT];
@@ -85,7 +86,7 @@ byte cmdChargerByte[8];
 byte cmdPrueba[8];
 const int PIN_CURRENT_1 = 14;
 SensorCorriente sensor1;
-float stsCorrienteCarga=0;
+double stsCorrienteCarga=0;
 
 
 void controlCharge(float maxVolt, float maxCurrent, bool start);
@@ -139,6 +140,7 @@ void loop()
   static float corrienteCarga = 0;
   static bool flagShow = false;
   bool stsChargerOK = false;
+  
 
 
   CAN.receive();
@@ -146,7 +148,9 @@ void loop()
   stsChargerOK = (stsChargerByte[4] == 0);
   stsStartCharge=!digitalRead(START_PIN);
 
- 
+
+ //0.85V lectura 1.73V real a 
+ //1.73V a 5V   R=2.89
   int adcCurrentValue=analogRead(AMP_PIN);
   stsCorrienteCarga=sensor1.calcularCorrienteS1(adcCurrentValue);
   stsAMPOK=(sensor1.getVoltaje(adcCurrentValue)>0.5);
@@ -181,17 +185,26 @@ void loop()
   stsFail=failCondition;
   //stsFail=0;
 
+  if(!holdBMSOK)
+  {
+
+ 
   if (stsFail)
   {
     cmdCharge = 0;
     corrienteCarga = 0;
-   // digitalWrite(BMS_OK, false);
+   digitalWrite(BMS_OK, false);
   }
   else
   {
     digitalWrite(BMS_OK, true);
     flagShow = 0;
   }
+}
+else
+{
+  digitalWrite(BMS_OK, true);
+}
 
   controlCharge(350, corrienteCarga, cmdCharge);
 
@@ -216,7 +229,8 @@ void loop()
     t = millis();
     //bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
     //  Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK +" stsAMPOK= "+stsAMPOK);
-     //Serial.println((String)"Adc current value= "+adcCurrentValue+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
+     Serial.println((String)"Current= "+stsCorrienteCarga+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
+     Serial.println(sensor1.getVoltaje(adcCurrentValue),6);
     // Serial.println((String)"start_charge"+stsStartCharge);
      //Serial.println((String)"FAIL: "+ stsFail);
     // CAN.printByteArray(stsChargerByte,8);
@@ -348,11 +362,13 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     }
     else if (comando == "s")
     {
-      bool oko;
-      readVoltages(oko);
-      checkFails(oko);
-      setupExclusions();
-      printExclusionLists();
+      // bool oko;
+      // readVoltages(oko);
+      // checkFails(oko);
+      // setupExclusions();
+      // printExclusionLists();
+      holdBMSOK=!holdBMSOK;
+      Serial.println((String)"hold bms = "+holdBMSOK);
 
       // --- Comando desconocido ---
     }
@@ -653,7 +669,7 @@ int readVoltages2(bool &ok)
   i = 0;
   currentBoard = 0;
   WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);
-  
+ delay(10);
 
   // PARSE, FORMAT, AND PRINT THE DATA
   for (currentBoard = 0; currentBoard < TOTALBOARDS; currentBoard++)
