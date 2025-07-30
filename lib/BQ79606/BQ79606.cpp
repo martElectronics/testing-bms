@@ -83,6 +83,19 @@ void CommClear(void){
 
 
 
+// //Device go to sleep to active state
+// void CommSleepToWake(void) {
+//     BMS_UART.end();             //Comunication end
+//     pinMode(BMS_TX,OUTPUT);     //RX pin is an output
+//     digitalWrite(BMS_TX,0);     //RX to low
+
+// 	delayMicroseconds(260);     // 250us to 300us, same as wake
+
+//     //BMS_UART.begin(BAUDRATE, SERIAL_8N1);   //UART inicilization
+//     BMS_UART.begin(1000000, SERIAL_8N1, MySerialRX, MySerialTX);
+//     delayMicroseconds(170*TOTALBOARDS);     //tSU(SLPtoACT) transition time from sleep to active - 170us from wake receive to wake propagate for each device
+// }
+
 //Device go to sleep to active state
 void CommSleepToWake(void) {
     BMS_UART.end();             //Comunication end
@@ -90,10 +103,11 @@ void CommSleepToWake(void) {
     digitalWrite(BMS_TX,0);     //RX to low
 
 	delayMicroseconds(260);     // 250us to 300us, same as wake
-
-    BMS_UART.begin(BAUDRATE, SERIAL_8N1);   //UART inicilization
-    
-    delayMicroseconds(170*TOTALBOARDS);     //tSU(SLPtoACT) transition time from sleep to active - 170us from wake receive to wake propagate for each device
+    digitalWrite(BMS_TX,0);     //RX to low
+    //BMS_UART.begin(BAUDRATE, SERIAL_8N1);   //UART inicilization
+    BMS_UART.begin(1000000, SERIAL_8N1, MySerialRX, MySerialTX);
+    //delayMicroseconds(170*TOTALBOARDS);     //tSU(SLPtoACT) transition time from sleep to active - 170us from wake receive to wake propagate for each device
+	delay(50);
 }
 
 

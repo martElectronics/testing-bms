@@ -23,7 +23,7 @@ float stsVoltCells[12][11];
 float stsTempCells[12][9];
 
 unsigned int numCRCFails = 0;
- bool holdBMSOK=false;
+ bool holdBMSOK=true;
 
 // --- Arrays de Resultados (Fallas) ---
 bool stsVoltCellsFail[MAX_MODULES][SENSORS_PER_MODULE_VOLT];
@@ -382,6 +382,12 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     {
       Serial.println("AAAAAAAAAAAA");
       configBMS();
+      // --- Comando desconocido ---
+    }
+    else if (comando == "b")
+    {
+      Serial.println("BBBBBBBBBBBBBBBBBBBBBBBBB");
+      CommSleepToWake();
       // --- Comando desconocido ---
     }
 

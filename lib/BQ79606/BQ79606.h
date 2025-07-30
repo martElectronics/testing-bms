@@ -16,6 +16,7 @@
 #define PWM_FANS  9         //
 #define AMP_PIN  10         
 #define START_PIN  5
+#define PIN_SDC  9
 //WAKE 7
 
 #define FRMWRT_SGL_R	  0x00 // single device read 
