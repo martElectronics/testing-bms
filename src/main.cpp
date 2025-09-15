@@ -125,6 +125,8 @@ void setup()
   printExclusionLists();
 
   pixels.clear(); // Set all pixel colors to 'off'
+
+  Serial.println((String)"INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura" );
 }
 
 void loop()
@@ -229,8 +231,8 @@ else
     t = millis();
     //bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
     //  Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK +" stsAMPOK= "+stsAMPOK);
-     Serial.println((String)"Current= "+stsCorrienteCarga+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
-     Serial.println(sensor1.getVoltaje(adcCurrentValue),6);
+    //  Serial.println((String)"Current= "+stsCorrienteCarga+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
+    //  Serial.println(sensor1.getVoltaje(adcCurrentValue),6);
     // Serial.println((String)"start_charge"+stsStartCharge);
      //Serial.println((String)"FAIL: "+ stsFail);
     // CAN.printByteArray(stsChargerByte,8);
