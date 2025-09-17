@@ -19,6 +19,8 @@ CAN_BUS CAN(HardwareType::Transciever, MCP_SPEED_500, 2, 10);
 const int MAX_MODULES = TOTALBOARDS / 2;
 const int SENSORS_PER_MODULE_VOLT = 11;
 const int SENSORS_PER_MODULE_TEMP = 9;
+
+//En estos arrays se guardan las temperaturas y los voltajes de los módulos
 float stsVoltCells[12][11];
 float stsTempCells[12][9];
 
@@ -50,11 +52,6 @@ Devuelve:
 */
 int readVoltages2(bool &ok);
 
-/**
-Función que encapsula el código que se usa en la rama /main para hacer las lecturas de las tensiones de las celdas y los voltajes
-Está poco optimizada y no se usa en este código
-*/
-void printVoltages();
 
 /**
 Función auxiliar que convierte el voltaje de los NTC a temperatura en grados celsius
@@ -62,16 +59,72 @@ Función auxiliar que convierte el voltaje de los NTC a temperatura en grados ce
 float voltToTemp(float GPIOVoltage);
 
 /**
-Analiza las tensiones y temperaturas que ha guardado en memoria  (ver Márgenes Parametrizables)
+Analiza las tensiones y temperaturas están guardadas en memoria: "stsVoltCells" y "stsTempCells"  
+y pone "ok"=0 si alguna está fuera del rango seguro (ver Márgenes Parametrizables).
+También actualiza los arrays: "stsVoltCellsFail" y "stsTempCellsFail" (Indican fallos (0 o 1) de cada elemento de forma resumida)
 */
 void checkFails(bool &ok);
 
+/**
+Permite configurar alguna excepción (de tensión o temperatura) para que no se detecte como fallo al realizar la lectura.
+La función checkFails() la ignora a la hora de notificar si hay algún fallo o no (tampoco lo indica en los arrays de fallos)
+*/
 void setupExclusions();
+
+
+/**
+Envía el mensaje por CAN necesario al cargador para iniciar y detener la carga
+*/
+void controlCharge(float maxVolt, float maxCurrent, bool start);
+
+/**
+Muestra las tensiones y temperaturas detalladas de cada módulo
+*/
+void mostrarDatosDetallados();
+
+/**
+Muestra los datos de la carga
+*/
+void showChargeData();
+
+/**
+Lee el carácter introducido por el usuario por teclado para mostrar información relevante de los módulos
+*/
+void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset, bool &fail);
+
+
+
+//**** FUNCIONES DE DEPURACIÓN */
+
+/**
+Función para depurar que llena los arrays donde se guardan los datos de las tensiones y temperaturas con datos no reales
+para comprobar que todo funciona bien
+*/
 void populateTestData();
+
+/**
+Imprime por el monitor serial los fallos de cada módulo (indicado por 0 o 1)
+*/
 void printFailResults();
+
+
+/**
+Imprime por el monitor serial la lista de exclusión configurada
+*/
 void printExclusionLists();
 
+/**
+Función que encapsula el código que se usa en la rama /main para hacer las lecturas de las tensiones de las celdas y los voltajes
+Está poco optimizada y no se usa en este código
+*/
+void printVoltages();
+
+/**
+No usada
+*/
 void readVoltages();
+
+
 // Estructura para definir un punto de exclusión.
 // Estructura y lista para excluir sensores de VOLTAJE
 struct VoltExclusionPoint
@@ -115,10 +168,8 @@ SensorCorriente sensor1;
 double stsCorrienteCarga=0;
 
 
-void controlCharge(float maxVolt, float maxCurrent, bool start);
-void mostrarDatosDetallados();
-void showChargeData();
-void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset, bool &fail);
+
+
 
 void setup()
 {
@@ -133,7 +184,7 @@ void setup()
   }
   Serial.println("CAN OK");
   bool okk = false;
-  readVoltages(okk);
+  readVoltages2(okk);
   checkFails(okk);
   printFailResults();
   //setupExclusions();
