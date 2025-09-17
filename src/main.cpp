@@ -35,17 +35,43 @@ const float MAX_VALID_VOLTAGE = 4.2f;
 const float MIN_VALID_TEMP = 5.0f;
 const float MAX_VALID_TEMP = 60.0f;
 
+/**
+//Inicializa la comunicación Serial del ESP32-PC y del ESP32-BQ, además de escribir en los registros internos de los BQ
+para configurar los ADC, activar las entradas analógicas y borrar los fallos que pueda haber residuales
+*/
 void configBMS();
-void readVoltages(bool &ok);
+
+/**
+Lee las tensiones de las celdas y los voltajes de los NTC y las guarda en: "stsVoltCells" y "stsTempCells". 
+Devuelve:
+-> 0 si no hay errores en la comunicación
+-> -1 si hay errores en la comunicación (fallo de lectura)
+-> 1 si hay error en la comunicación (CRC incorrecto)
+*/
 int readVoltages2(bool &ok);
+
+/**
+Función que encapsula el código que se usa en la rama /main para hacer las lecturas de las tensiones de las celdas y los voltajes
+Está poco optimizada y no se usa en este código
+*/
 void printVoltages();
+
+/**
+Función auxiliar que convierte el voltaje de los NTC a temperatura en grados celsius
+*/
 float voltToTemp(float GPIOVoltage);
+
+/**
+Analiza las tensiones y temperaturas que ha guardado en memoria  (ver Márgenes Parametrizables)
+*/
 void checkFails(bool &ok);
 
 void setupExclusions();
 void populateTestData();
 void printFailResults();
 void printExclusionLists();
+
+void readVoltages();
 // Estructura para definir un punto de exclusión.
 // Estructura y lista para excluir sensores de VOLTAJE
 struct VoltExclusionPoint
@@ -106,17 +132,6 @@ void setup()
     Serial.println("Error Initializing EScP32Can...");
   }
   Serial.println("CAN OK");
-
-  // populateTestData();
-
-  //   Serial.println("\nEjecutando checkFails()...");
-  //  // checkFails();
-
-  //   printFailResults();
-
-  //   Serial.println("\n--- Fin de la demostración ---");
-  Serial.println("i = mostrar datos módulos, f= forzar fallo, r=reset fallo,l= lista de fallos");
-
   bool okk = false;
   readVoltages(okk);
   checkFails(okk);
