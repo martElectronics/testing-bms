@@ -65,7 +65,7 @@ void Ini_ESP(){
 void Wake79606() {
     // toggle wake signal
     digitalWrite(Wake_pin, LOW);  // assert wake (active low)
-    delayMicroseconds(275);       //250us to 300us
+    delayMicroseconds(300);       //250us to 300us
     digitalWrite(Wake_pin, HIGH); // deassert wake
     delay(12*TOTALBOARDS);        //tSU(WAKE) transition time from shutdown to active - 7ms from wake receive to wake propagate for each device
 }
@@ -104,8 +104,8 @@ void CommSleepToWake(void) {
 
 	delayMicroseconds(260);     // 250us to 300us, same as wake
     digitalWrite(BMS_TX,0);     //RX to low
-    //BMS_UART.begin(BAUDRATE, SERIAL_8N1);   //UART inicilization
-    BMS_UART.begin(1000000, SERIAL_8N1, MySerialRX, MySerialTX);
+    BMS_UART.begin(BAUDRATE, SERIAL_8N1,MySerialRX, MySerialTX);   //UART inicilization
+    //BMS_UART.begin(1000000, SERIAL_8N1, MySerialRX, MySerialTX);
     //delayMicroseconds(170*TOTALBOARDS);     //tSU(SLPtoACT) transition time from sleep to active - 170us from wake receive to wake propagate for each device
 	delay(50);
 }
@@ -178,7 +178,7 @@ void CommReset(int BAUD) {
 //**********************
 bool AutoAddress()
 {
-	int t=20;
+	int t=50;
     memset(response_frame2,0,sizeof(response_frame2)); //clear out the response frame buffer
 
     //dummy write to ECC_TEST (sync DLL)
@@ -212,6 +212,7 @@ bool AutoAddress()
     //otherwise set the base and top of stack individually
     else
     {
+       // Serial.println("++++++++++++++++");
         WriteReg(0, CONFIG, 0x00, 1, FRMWRT_SGL_NR);  //base
 
 		for (nCurrentBoard = 1; nCurrentBoard < (TOTALBOARDS-1); nCurrentBoard++)
@@ -254,16 +255,20 @@ bool AutoAddress()
         ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
 		Serial.print((String)"Board "+nCurrentBoard+"= ");
 
-        Serial.print(response_frame2[4]);
+        Serial.println(response_frame2[4]);
 		//Devuelve false si no se ha hecho bien el autoadressing
-		if(response_frame2[4]!=nCurrentBoard) ok=false; 
-		Serial.println(".");
+		if(response_frame2[4]!=nCurrentBoard) 
+        {
+            ok=false; 
+            stsNumAutoadressedDevices=nCurrentBoard+1;
+        }
 
 		delay(10);
 
 	}
-
-	delay(100);
+    Serial.println((String)"Num Autoadressed Devices= "+stsNumAutoadressedDevices);
+    Serial.println();
+	delay(200);
 
 
 //    //OPTIONAL: read back all device addresses
@@ -390,83 +395,136 @@ int WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteTyp
 
 
 
+// //Read Register Instruction
+// int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOut, byte bWriteType) {
+// 	bRes = 0;  
+// 	count = 100000;
+// 	int recepciones = 0;
+// 	byte recibido [64];
+// 	int Reciving_Len = 0;
+
+// 	unsigned long int timeRead=millis();
+// 	unsigned long int timeoutMS=50;
+
+// 	if(bWriteType == FRMWRT_SGL_R){
+// 		Reciving_Len = (bLen + 6);
+// 	}
+// 	else if(bWriteType == FRMWRT_STK_R){
+// 		Reciving_Len = (bLen + 6) * (TOTALBOARDS - 1);
+// 	}
+// 	else if(bWriteType == FRMWRT_ALL_R){
+// 		Reciving_Len = (bLen + 6) * TOTALBOARDS;
+// 	}
+	
+
+
+// 	//Correct bWriteType
+// 	if((bWriteType == FRMWRT_SGL_R) || (bWriteType == FRMWRT_STK_R) || (bWriteType == FRMWRT_ALL_R)){
+// 		//Read FRame Request)
+// 		if(ReadFrameReq(bID, wAddr, bLen, bWriteType) == 0){
+// 			Serial.println("No se pueden leer mas de 128 bytes");
+// 		};	
+// 		memset(pData, 0, sizeof(pData));			//pData = empty
+// 		//timerStart(Reciving_Timeout);				//Timer timeout start
+
+// 		int Time = 0;
+// 		int maxTime=50;
+// 		//Waiting firts byte, If not reciving the first byte in 1 second send and error
+// 		while((BMS_UART.available() == 0) && (Time < maxTime)){
+// 			delay(5);
+// 			Time ++;
+			
+// 			if(Time == maxTime){
+// 				Serial.println((String)"Exec");
+// 				bRes = -1;		//Timeout error
+// 			}
+// 		}
+// 			Time = 0;
+
+// 		if(BMS_UART.available() > 0){
+
+// 			bRes = BMS_UART.readBytes(pData, Reciving_Len);
+
+// 		}
+// 	}
+// 	//InCorrect bWriteType
+// 	else{
+// 		bRes = 0;
+// 	}
+	
+// 	return bRes;
+// }
+
+
+
+
+
 //Read Register Instruction
 int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOut, byte bWriteType) {
-	bRes = 0;
-	count = 100000;
-	int recepciones = 0;
-	byte recibido [64];
-	int Reciving_Len = 0;
+    int Reciving_Len = 0;
+    int bytes_read = 0;
+    const uint32_t DEFAULT_TIMEOUT_MS = 50; // Set a default timeout
 
-	unsigned long int timeRead=millis();
-	unsigned long int timeoutMS=50;
+    // --- 1. Calculate expected response length ---
+    if(bWriteType == FRMWRT_SGL_R){
+        Reciving_Len = (bLen + 6);
+    }
+    else if(bWriteType == FRMWRT_STK_R){
+        // The base device (ID 0) forwards the request but doesn't include its response here.
+        // It should only be stack devices responding.
+        Reciving_Len = (bLen + 6) * (TOTALBOARDS - 1); 
+    }
+    else if(bWriteType == FRMWRT_ALL_R){
+        Reciving_Len = (bLen + 6) * TOTALBOARDS;
+    }
+    else{
+        // Not a Read operation type
+        return 0;
+    }
+    
+    // Check if expected length exceeds buffer size (MAXBYTES+6)*TOTALBOARDS
+    if (Reciving_Len > sizeof(pFrame)) { // Use size of the largest expected buffer
+        Serial.println(F("Error: Requested read length exceeds maximum buffer size."));
+        return -2; // New error code for logic error
+    }
 
-	if(bWriteType == FRMWRT_SGL_R){
-		Reciving_Len = (bLen + 6);
-	}
-	else if(bWriteType == FRMWRT_STK_R){
-		Reciving_Len = (bLen + 6) * (TOTALBOARDS - 1);
-	}
-	else if(bWriteType == FRMWRT_ALL_R){
-		Reciving_Len = (bLen + 6) * TOTALBOARDS;
-	}
-	
+    // --- 2. Send the Read Request Frame ---
+    if(ReadFrameReq(bID, wAddr, bLen, bWriteType) == 0){
+        Serial.println(F("Error: ReadFrameReq exceeded 128 bytes limit."));
+        return -3; // New error code for logic error
+    };	
 
+    // --- 3. Configure UART Timeout ---
+    if (dwTimeOut == 0) {
+        BMS_UART.setTimeout(DEFAULT_TIMEOUT_MS);
+    } else {
+        BMS_UART.setTimeout(dwTimeOut);
+    }
 
-	//Correct bWriteType
-	if((bWriteType == FRMWRT_SGL_R) || (bWriteType == FRMWRT_STK_R) || (bWriteType == FRMWRT_ALL_R)){
-		//Read FRame Request)
-		if(ReadFrameReq(bID, wAddr, bLen, bWriteType) == 0){
-			Serial.println("No se pueden leer mas de 128 bytes");
-		};	
-		memset(pData, 0, sizeof(pData));			//pData = empty
-		//timerStart(Reciving_Timeout);				//Timer timeout start
+    // Clear the receive buffer (optional, but good practice before starting wait for response)
+    BMS_UART.flush(); 
+    
+    // Clear the destination data buffer
+    memset(pData, 0, Reciving_Len); 
 
-		int Time = 0;
-		int maxTime=50;
-		//Waiting firts byte, If not reciving the first byte in 1 second send and error
-		while((BMS_UART.available() == 0) && (Time < maxTime)){
-			delay(5);
-			Time ++;
-			
-			if(Time == maxTime){
-				Serial.println((String)"Exec");
-				bRes = -1;		//Timeout error
-			}
-		}
-			Time = 0;
+    // --- 4. Read the expected number of bytes ---
+    // The readBytes function internally handles waiting up to the timeout.
+    bytes_read = BMS_UART.readBytes(pData, Reciving_Len);
+    static int cont=0;
+    if (bytes_read != Reciving_Len) {
+		
+        // Timeout occurred or communication interrupted if less than expected bytes were read
+        Serial.print(F("Timeout/Incomplete Read. Expected: "));
+        Serial.print(Reciving_Len);
+        Serial.print(F(", Read: "));
+        Serial.println(bytes_read);
+		
+        return -1; // Timeout/Incomplete Read Error
+    }
 
-		// while(   (BMS_UART.available() == 0) &&   (millis()-timeRead)<=timeoutMS)   {
-			
-				
-		// 	}
-		// if((millis()-timeRead)>=timeoutMS)
-		// {
-		// 	bRes = -1;		//Timeout erro
-		// }
-
-
-			
-		//timerStop(Reciving_Timeout);	//Timer Timeout Stop
-		//timerRestart(Reciving_Timeout);	//Timer Timeout Reset counter value
-
-			
-
-		//Data avalible, start to read all data
-		if(BMS_UART.available() > 0){
-
-			bRes = BMS_UART.readBytes(pData, Reciving_Len);
-
-		}
-	}
-	//InCorrect bWriteType
-	else{
-		bRes = 0;
-	}
-	
-	return bRes;
+    // Success: return number of bytes read
+    return bytes_read;
 }
-
 
 
 //Read Frame Request
