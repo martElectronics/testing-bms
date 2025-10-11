@@ -90,6 +90,13 @@ Lee el carácter introducido por el usuario por teclado para mostrar informació
 void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset, bool &fail);
 
 
+/**
+Muestra las temperaturas detalladas de un módulo
+*/
+void mostrarDatosDetalladosTemperaturas(int i);
+
+/**
+
 
 //**** FUNCIONES DE DEPURACIÓN */
 
@@ -318,7 +325,7 @@ void setup()
   checkFails(okk);
   printFailResults();
   //setupExclusions();
-  printExclusionLists();
+  //printExclusionLists();
 
   pixels.clear(); // Set all pixel colors to 'off'
 
@@ -472,6 +479,7 @@ else
  // Serial.println(millis()-tTotal);
 
  //Serial.println(stsTempCells[0][1]);
+ mostrarDatosDetalladosTemperaturas(0);
 }
 
 void debug()
@@ -627,6 +635,17 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     Serial.println("i = mostrar datos módulos, f= forzar fallo, r=reset fallo,l= lista de fallos, s= crear lista de exclusión");
   }
 }
+
+void mostrarDatosDetalladosTemperaturas(int i)
+{
+  for (int j = 0; j < 9; j++)
+    {
+      Serial.print((String) (j+1) + "-> "+stsTempCells[i][j]); // Imprime con 1 decimal
+      Serial.print("   ");
+    }
+    Serial.println();
+}
+
 
 void mostrarDatosDetallados()
 {
