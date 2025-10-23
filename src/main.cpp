@@ -6,7 +6,6 @@
 #include <Adafruit_NeoPixel.h>
 #include "SensorCorriente.cpp"
 
-
 // LED
 #define LED_PIN 48
 #define LED_COUNT 1
@@ -20,13 +19,13 @@ const int MAX_MODULES = TOTALBOARDS / 2;
 const int SENSORS_PER_MODULE_VOLT = 11;
 const int SENSORS_PER_MODULE_TEMP = 9;
 
-//En estos arrays se guardan las temperaturas y los voltajes de los módulos
+// En estos arrays se guardan las temperaturas y los voltajes de los módulos
 float stsVoltCells[12][11];
 float stsTempCells[12][9];
 
 unsigned int numCRCFails = 0;
- bool holdBMSOK=true;
-byte stsNumAutoadressedDevices=0;
+bool holdBMSOK = true;
+byte stsNumAutoadressedDevices = 0;
 
 // --- Arrays de Resultados (Fallas) ---
 bool stsVoltCellsFail[MAX_MODULES][SENSORS_PER_MODULE_VOLT];
@@ -38,10 +37,8 @@ const float MAX_VALID_VOLTAGE = 4.2f;
 const float MIN_VALID_TEMP = 5.0f;
 const float MAX_VALID_TEMP = 60.0f;
 
-
-
 /**
-Lee las tensiones de las celdas y los voltajes de los NTC y las guarda en: "stsVoltCells" y "stsTempCells". 
+Lee las tensiones de las celdas y los voltajes de los NTC y las guarda en: "stsVoltCells" y "stsTempCells".
 Devuelve:
 -> 0 si no hay errores en la comunicación
 -> -1 si hay errores en la comunicación (fallo de lectura)
@@ -49,14 +46,13 @@ Devuelve:
 */
 int readVoltages2(bool &ok);
 
-
 /**
 Función auxiliar que convierte el voltaje de los NTC a temperatura en grados celsius
 */
 float voltToTemp(float GPIOVoltage);
 
 /**
-Analiza las tensiones y temperaturas están guardadas en memoria: "stsVoltCells" y "stsTempCells"  
+Analiza las tensiones y temperaturas están guardadas en memoria: "stsVoltCells" y "stsTempCells"
 y pone "ok"=0 si alguna está fuera del rango seguro (ver Márgenes Parametrizables).
 También actualiza los arrays: "stsVoltCellsFail" y "stsTempCellsFail" (Indican fallos (0 o 1) de cada elemento de forma resumida)
 */
@@ -67,7 +63,6 @@ Permite configurar alguna excepción (de tensión o temperatura) para que no se 
 La función checkFails() la ignora a la hora de notificar si hay algún fallo o no (tampoco lo indica en los arrays de fallos)
 */
 void setupExclusions();
-
 
 /**
 Envía el mensaje por CAN necesario al cargador para iniciar y detener la carga
@@ -88,7 +83,6 @@ void showChargeData();
 Lee el carácter introducido por el usuario por teclado para mostrar información relevante de los módulos
 */
 void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset, bool &fail);
-
 
 /**
 Muestra las temperaturas detalladas de un módulo
@@ -111,7 +105,6 @@ Imprime por el monitor serial los fallos de cada módulo (indicado por 0 o 1)
 */
 void printFailResults();
 
-
 /**
 Imprime por el monitor serial la lista de exclusión configurada
 */
@@ -128,11 +121,10 @@ No usada
 */
 void readVoltages();
 
-
 // Define the starting address and length for the read block
 #define START_ADDR_INFO 0x0200 // Starting with PARTID register
-#define LEN_READ_INFO   81     // Reading up to AUX_AVAO_REFL (0x0250)
-#define MAX_BUFFER_SIZE (LEN_READ_INFO + 6) 
+#define LEN_READ_INFO 81       // Reading up to AUX_AVAO_REFL (0x0250)
+#define MAX_BUFFER_SIZE (LEN_READ_INFO + 6)
 
 /**
  * Reads a contiguous block of status/ADC registers from a single BQ79606A-Q1 IC
@@ -140,71 +132,101 @@ void readVoltages();
  *
  * @param deviceID The address of the target BQ79606A-Q1 device (0 to TOTALBOARDS-1).
  */
-void readAndDisplaySingleICRegisters(uint8_t deviceID) {
-    uint8_t readBuffer[MAX_BUFFER_SIZE] = {0};
-    int bytesRead = 0;
-    uint16_t currentAddress = START_ADDR_INFO;
+void readAndDisplaySingleICRegisters(uint8_t deviceID)
+{
+  uint8_t readBuffer[MAX_BUFFER_SIZE] = {0};
+  int bytesRead = 0;
+  uint16_t currentAddress = START_ADDR_INFO;
 
-    Serial.println("\n--- Reading Status and ADC Registers (0x0200 to 0x0250) ---");
-    Serial.printf("Target Device ID: %u\n", deviceID);
+  Serial.println("\n--- Reading Status and ADC Registers (0x0200 to 0x0250) ---");
+  Serial.printf("Target Device ID: %u\n", deviceID);
 
-    // 1. Execute Single Device Read for 81 bytes
-    bytesRead = ReadReg(
-        deviceID,
-        START_ADDR_INFO,
-        readBuffer,
-        LEN_READ_INFO,
-        0, // Timeout parameter ignored for this example
-        FRMWRT_SGL_R // Single Device Read
-    );
+  // 1. Execute Single Device Read for 81 bytes
+  bytesRead = ReadReg(
+      deviceID,
+      START_ADDR_INFO,
+      readBuffer,
+      LEN_READ_INFO,
+      0,           // Timeout parameter ignored for this example
+      FRMWRT_SGL_R // Single Device Read
+  );
 
-    if (bytesRead <= 0) {
-        Serial.printf("ERROR: Failed to read registers. ReadReg returned %d bytes.\n", bytesRead);
-        if (bytesRead == -1) {
-            Serial.println("Possible: Timeout Error or No device found.");
-        }
-        return;
+  if (bytesRead <= 0)
+  {
+    Serial.printf("ERROR: Failed to read registers. ReadReg returned %d bytes.\n", bytesRead);
+    if (bytesRead == -1)
+    {
+      Serial.println("Possible: Timeout Error or No device found.");
     }
+    return;
+  }
 
-    // 2. Check CRC to ensure data integrity
-    if (!CheckCRC(readBuffer, bytesRead)) {
-        Serial.println("ERROR: CRC check failed on received data. Data may be corrupted.");
-        return;
+  // 2. Check CRC to ensure data integrity
+  if (!CheckCRC(readBuffer, bytesRead))
+  {
+    Serial.println("ERROR: CRC check failed on received data. Data may be corrupted.");
+    return;
+  }
+
+  // 3. Process and print the received data
+  // The actual data starts at index 4 (after Init Byte, Device ID, and 2x Reg Address)
+  Serial.println("Address | Hex Value | Register");
+  Serial.println("-------------------------------------");
+
+  for (int i = 0; i < LEN_READ_INFO; ++i)
+  {
+    uint8_t dataByte = readBuffer[4 + i]; // Data starts at buffer index 4
+
+    // Print Address and Value
+    Serial.printf("0x%04X  |  0x%02X   | ", currentAddress + i, dataByte);
+
+    // Print Register Name (using a partial switch for illustration)
+    switch (currentAddress + i)
+    {
+    case PARTID:
+      Serial.println("PARTID (Device Revision)");
+      break;
+    case SYS_FAULT1:
+      Serial.println("SYS_FAULT1 (System Fault 1)");
+      break;
+    case SYS_FAULT2:
+      Serial.println("SYS_FAULT2 (System Fault 2)");
+      break;
+    case DEV_STAT:
+      Serial.println("DEV_STAT (Device Status)");
+      break;
+    case FAULT_SUM:
+      Serial.println("FAULT_SUM (Fault Summary)");
+      break;
+    case VCELL1H:
+      Serial.println("VCELL1H (Cell 1 Voltage High)");
+      break;
+    case VCELL1L:
+      Serial.println("VCELL1L (Cell 1 Voltage Low)");
+      break;
+    case AUX_BATH:
+      Serial.println("AUX_BATH (Stack Voltage High)");
+      break;
+    case AUX_BATL:
+      Serial.println("AUX_BATL (Stack Voltage Low)");
+      break;
+    case AUX_AVDDH:
+      Serial.println("AUX_AVDDH (AVDD LDO Voltage High)");
+      break;
+    case AUX_CVDDH:
+      Serial.println("AUX_CVDDH (CVDD LDO Voltage High)");
+      break;
+    case AUX_AVAOH:
+      Serial.println("AUX_AVAOH (AVAO_REF Voltage High)");
+      break;
+    default:
+      Serial.println("");
+      break;
     }
-
-    // 3. Process and print the received data
-    // The actual data starts at index 4 (after Init Byte, Device ID, and 2x Reg Address)
-    Serial.println("Address | Hex Value | Register");
-    Serial.println("-------------------------------------");
-
-    for (int i = 0; i < LEN_READ_INFO; ++i) {
-        uint8_t dataByte = readBuffer[4 + i]; // Data starts at buffer index 4
-
-        // Print Address and Value
-        Serial.printf("0x%04X  |  0x%02X   | ", currentAddress + i, dataByte);
-
-        // Print Register Name (using a partial switch for illustration)
-        switch(currentAddress + i) {
-            case PARTID: Serial.println("PARTID (Device Revision)"); break;
-            case SYS_FAULT1: Serial.println("SYS_FAULT1 (System Fault 1)"); break;
-            case SYS_FAULT2: Serial.println("SYS_FAULT2 (System Fault 2)"); break;
-            case DEV_STAT: Serial.println("DEV_STAT (Device Status)"); break;
-            case FAULT_SUM: Serial.println("FAULT_SUM (Fault Summary)"); break;
-            case VCELL1H: Serial.println("VCELL1H (Cell 1 Voltage High)"); break;
-            case VCELL1L: Serial.println("VCELL1L (Cell 1 Voltage Low)"); break;
-            case AUX_BATH: Serial.println("AUX_BATH (Stack Voltage High)"); break;
-            case AUX_BATL: Serial.println("AUX_BATL (Stack Voltage Low)"); break;
-            case AUX_AVDDH: Serial.println("AUX_AVDDH (AVDD LDO Voltage High)"); break;
-            case AUX_CVDDH: Serial.println("AUX_CVDDH (CVDD LDO Voltage High)"); break;
-            case AUX_AVAOH: Serial.println("AUX_AVAOH (AVAO_REF Voltage High)"); break;
-            default: Serial.println(""); break;
-        }
-    }
-    Serial.println("-------------------------------------");
-    Serial.println("--- Register Read Complete ---");
+  }
+  Serial.println("-------------------------------------");
+  Serial.println("--- Register Read Complete ---");
 }
-
-
 
 /**
  * @brief Reads the content of a single, one-byte register from the BQ79606A-Q1
@@ -213,54 +235,55 @@ void readAndDisplaySingleICRegisters(uint8_t deviceID) {
  * @param deviceID The address of the target BQ79606A-Q1 device (0 to TOTALBOARDS-1).
  * @param regAddress The 16-bit address of the register to read (e.g., 0x0201 for SYS_FAULT1).
  */
-void readAndPrintSingleRegister(uint8_t deviceID, uint16_t regAddress) {
-    uint8_t readBuffer[7] = {0};
-    const uint8_t dataLength = 1; // We are reading exactly one byte
-    int bytesRead = 0;
+void readAndPrintSingleRegister(uint8_t deviceID, uint16_t regAddress)
+{
+  uint8_t readBuffer[7] = {0};
+  const uint8_t dataLength = 1; // We are reading exactly one byte
+  int bytesRead = 0;
 
-    Serial.printf("--- Reading Register 0x%04X (Device ID: %u) ---\n", regAddress, deviceID);
+  Serial.printf("--- Reading Register 0x%04X (Device ID: %u) ---\n", regAddress, deviceID);
 
-    // 1. Execute Single Device Read (Requesting 1 byte)
-    bytesRead = ReadReg(
-        deviceID,
-        regAddress,
-        readBuffer,
-        dataLength,
-        0, // Timeout ignored for this example
-        FRMWRT_SGL_R
-    );
+  // 1. Execute Single Device Read (Requesting 1 byte)
+  bytesRead = ReadReg(
+      deviceID,
+      regAddress,
+      readBuffer,
+      dataLength,
+      0, // Timeout ignored for this example
+      FRMWRT_SGL_R);
 
-    if (bytesRead <= 0) {
-        Serial.printf("ERROR: Failed to read register. ReadReg returned %d bytes.\n", bytesRead);
-        if (bytesRead == -1) {
-            Serial.println("CAUSE: Communication timeout or device non-responsive.");
-        }
-        return;
+  if (bytesRead <= 0)
+  {
+    Serial.printf("ERROR: Failed to read register. ReadReg returned %d bytes.\n", bytesRead);
+    if (bytesRead == -1)
+    {
+      Serial.println("CAUSE: Communication timeout or device non-responsive.");
     }
-    
-    // Check for the minimum expected response size (1 data byte + 6 overhead = 7 bytes)
-    if (bytesRead < 7) {
-        Serial.printf("ERROR: Incomplete response. Expected at least 7 bytes, received %d.\n", bytesRead);
-        return;
-    }
+    return;
+  }
 
-    // 2. Check CRC to ensure data integrity
-    if (!CheckCRC(readBuffer, bytesRead)) {
-        Serial.println("ERROR: CRC check failed on received data. Data corrupted.");
-        return;
-    }
+  // Check for the minimum expected response size (1 data byte + 6 overhead = 7 bytes)
+  if (bytesRead < 7)
+  {
+    Serial.printf("ERROR: Incomplete response. Expected at least 7 bytes, received %d.\n", bytesRead);
+    return;
+  }
 
-    // 3. Extract and print the data
-    // The single byte of data is always at index 4 of the successful response frame.
-    uint8_t registerValue = readBuffer[4]; 
-    
-    Serial.printf("  0x%04X: Value = 0x%02X (Binary: 0b%s)\n", 
-                  regAddress, registerValue, String(registerValue, 2).c_str());
-    Serial.println("--- Read Complete ---");
+  // 2. Check CRC to ensure data integrity
+  if (!CheckCRC(readBuffer, bytesRead))
+  {
+    Serial.println("ERROR: CRC check failed on received data. Data corrupted.");
+    return;
+  }
+
+  // 3. Extract and print the data
+  // The single byte of data is always at index 4 of the successful response frame.
+  uint8_t registerValue = readBuffer[4];
+
+  Serial.printf("  0x%04X: Value = 0x%02X (Binary: 0b%s)\n",
+                regAddress, registerValue, String(registerValue, 2).c_str());
+  Serial.println("--- Read Complete ---");
 }
-
-
-
 
 // Estructura para definir un punto de exclusión.
 // Estructura y lista para excluir sensores de VOLTAJE
@@ -302,17 +325,13 @@ byte cmdChargerByte[8];
 byte cmdPrueba[8];
 const int PIN_CURRENT_1 = 14;
 SensorCorriente sensor1;
-double stsCorrienteCarga=0;
-
-
-
-
+double stsCorrienteCarga = 0;
 
 void setup()
 {
 
   bool ok = false;
-  
+
   configBMS();
   digitalWrite(BMS_OK, true);
   while (CAN.error == 1)
@@ -324,17 +343,17 @@ void setup()
   readVoltages2(okk);
   checkFails(okk);
   printFailResults();
-  //setupExclusions();
-  //printExclusionLists();
+  // setupExclusions();
+  // printExclusionLists();
 
   pixels.clear(); // Set all pixel colors to 'off'
 
-  Serial.println((String)"INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura" );
+  Serial.println((String) "INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura");
 }
 
 void loop()
 {
-  unsigned long int tTotal=millis();
+  unsigned long int tTotal = millis();
   static bool cmdCharge = false;
   static bool stsNumBytesOK = false;
   static bool stsVoltagesOK = false;
@@ -345,83 +364,66 @@ void loop()
   static float corrienteCarga = 0;
   static bool flagShow = false;
   bool stsChargerOK = false;
-  
-
 
   CAN.receive();
   CAN.getPacket(idStsCharger, stsChargerByte, 8, false);
   stsChargerOK = (stsChargerByte[4] == 0);
-  stsStartCharge=!digitalRead(START_PIN);
+  stsStartCharge = !digitalRead(START_PIN);
 
+  // 0.85V lectura 1.73V real a
+  // 1.73V a 5V   R=2.89
+  int adcCurrentValue = analogRead(AMP_PIN);
+  stsCorrienteCarga = sensor1.calcularCorrienteS1(adcCurrentValue);
+  stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
+  // stsAMPOK=true;
 
- //0.85V lectura 1.73V real a 
- //1.73V a 5V   R=2.89
-  int adcCurrentValue=analogRead(AMP_PIN);
-  stsCorrienteCarga=sensor1.calcularCorrienteS1(adcCurrentValue);
-  stsAMPOK=(sensor1.getVoltaje(adcCurrentValue)>0.5);
- // stsAMPOK=true;
-
- static int contFails=0;
-   int resReadVoltages=readVoltages2(stsNumBytesOK);
-  if(resReadVoltages==0)
+  static int contFails = 0;
+  int resReadVoltages = readVoltages2(stsNumBytesOK);
+  if (resReadVoltages == 0)
   {
     checkFails(stsVoltagesOK);
   }
-  else if(resReadVoltages==1)
+  else if (resReadVoltages == 1)
   {
     numCRCFails++;
     Serial.println("CRC error");
   }
-  else if(resReadVoltages==-1)
+  else if (resReadVoltages == -1)
   {
     contFails++;
     Serial.print("*********CONT = ");
     Serial.println(contFails);
-    if(contFails>5)
+    if (contFails > 5)
     {
-      //configBMS();
-      contFails=0;
+      // configBMS();
+      contFails = 0;
     }
   }
 
   procesarComandoSerial(corrienteCarga, cmdCharge, cmdResetFail, stsNumBytesOK);
 
   bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
-  //failCondition=false;
-  // failCondition = false;
+  stsFail = failCondition;
 
-  // if (failCondition)
-  // {
-  //   stsFail = 1;
-  // }
-  // else if (!failCondition && cmdResetFail)
-  // {
-  //   cmdResetFail = false;
-  //   stsFail = 0;
-  // }
-  stsFail=failCondition;
-  //stsFail=0;
-
-  if(!holdBMSOK)
+  if (!holdBMSOK)
   {
 
- 
-  if (stsFail)
-  {
-    cmdCharge = 0;
-    corrienteCarga = 0;
-   digitalWrite(BMS_OK, false);
+    if (stsFail)
+    {
+      cmdCharge = 0;
+      corrienteCarga = 0;
+      digitalWrite(BMS_OK, false);
+    }
+    else
+    {
+      digitalWrite(BMS_OK, true);
+      flagShow = 0;
+    }
   }
   else
   {
     digitalWrite(BMS_OK, true);
-    flagShow = 0;
   }
-}
-else
-{
-  digitalWrite(BMS_OK, true);
-}
 
   controlCharge(350, corrienteCarga, cmdCharge);
 
@@ -444,14 +446,14 @@ else
     // printVoltages();
     // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
     t = millis();
-    //bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
-    //  Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK +" stsAMPOK= "+stsAMPOK);
-    //  Serial.println((String)"Current= "+stsCorrienteCarga+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
-    //  Serial.println(sensor1.getVoltaje(adcCurrentValue),6);
-    // Serial.println((String)"start_charge"+stsStartCharge);
-     //Serial.println((String)"FAIL: "+ stsFail);
+    // bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
+    //   Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK +" stsAMPOK= "+stsAMPOK);
+    //   Serial.println((String)"Current= "+stsCorrienteCarga+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
+    //   Serial.println(sensor1.getVoltaje(adcCurrentValue),6);
+    //  Serial.println((String)"start_charge"+stsStartCharge);
+    // Serial.println((String)"FAIL: "+ stsFail);
     // CAN.printByteArray(stsChargerByte,8);
-   // Serial.println(t);
+    // Serial.println(t);
   }
 
   if (((millis() - t) >= 1000) && !stsFail)
@@ -474,12 +476,12 @@ else
     pixels.setPixelColor(0, pixels.Color(0, 255, 0));
     pixels.show(); // Send the updated pixel colors to the hardware.
   }
- // CAN.printReceivedIds();
-  //CAN.printByteArray(stsChargerByte,8);
- // Serial.println(millis()-tTotal);
+  // CAN.printReceivedIds();
+  // CAN.printByteArray(stsChargerByte,8);
+  // Serial.println(millis()-tTotal);
 
- //Serial.println(stsTempCells[0][1]);
- //mostrarDatosDetalladosTemperaturas(0);
+  // Serial.println(stsTempCells[0][1]);
+  // mostrarDatosDetalladosTemperaturas(0);
 }
 
 void debug()
@@ -545,7 +547,7 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       if (resReadVoltages == 0)
       {
         checkFails(stsVoltagesOK);
-         mostrarDatosDetallados();
+        mostrarDatosDetallados();
       }
       else if (resReadVoltages == 1)
       {
@@ -556,8 +558,6 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       {
         Serial.println("Read error");
       }
-
-     
     }
     else if (comando == "l")
     {
@@ -587,8 +587,8 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       // checkFails(oko);
       // setupExclusions();
       // printExclusionLists();
-      holdBMSOK=!holdBMSOK;
-      Serial.println((String)"hold bms = "+holdBMSOK);
+      holdBMSOK = !holdBMSOK;
+      Serial.println((String) "hold bms = " + holdBMSOK);
 
       // --- Comando desconocido ---
     }
@@ -619,10 +619,9 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
 
     else if (comando == "w")
     {
-      readAndPrintSingleRegister(2,0x0023);
+      readAndPrintSingleRegister(2, 0x0023);
       // --- Comando desconocido ---
     }
-    
 
     else if (comando.length() > 0)
     {
@@ -630,7 +629,6 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       Serial.print(comando);
       Serial.println(F("'"));
     }
-    
 
     Serial.println("i = mostrar datos módulos, f= forzar fallo, r=reset fallo,l= lista de fallos, s= crear lista de exclusión");
   }
@@ -639,17 +637,15 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
 void mostrarDatosDetalladosTemperaturas(int i)
 {
   for (int j = 0; j < 9; j++)
-    {
-      Serial.print((String) (j+1) + "-> "+stsTempCells[i][j]); // Imprime con 1 decimal
-      Serial.print("   ");
-    }
-    Serial.println();
+  {
+    Serial.print((String)(j + 1) + "-> " + stsTempCells[i][j]); // Imprime con 1 decimal
+    Serial.print("   ");
+  }
+  Serial.println();
 }
-
 
 void mostrarDatosDetallados()
 {
-
 
   Serial.println(F("\n--- Vista Detallada por Modulo ---")); // F() macro ahorra RAM
   Serial.println(F("Modulo | Voltajes (V)                  | Temperaturas (C)"));
@@ -665,7 +661,7 @@ void mostrarDatosDetallados()
     {
       Serial.print("0"); // Añade un cero para alinear M0 a M9 con M10 y M11
     }
-    Serial.print(i+1);
+    Serial.print(i + 1);
     Serial.print("   | V: ");
 
     // Imprime los 11 voltajes de celda para el módulo actual
@@ -771,7 +767,7 @@ void showChargeData()
   Serial.print(tempMedia, 2);
   Serial.println("C");
 
-  Serial.println((String)"Charge Current :" +stsCorrienteCarga);
+  Serial.println((String) "Charge Current :" + stsCorrienteCarga);
 }
 
 float voltToTemp(float GPIOVoltage)
@@ -921,7 +917,7 @@ int readVoltages2(bool &ok)
   i = 0;
   currentBoard = 0;
   WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);
- delay(10);
+  delay(10);
 
   // PARSE, FORMAT, AND PRINT THE DATA
   for (currentBoard = 0; currentBoard < TOTALBOARDS; currentBoard++)
@@ -1197,15 +1193,14 @@ void configBMS()
     ok = AutoAddress();
   }
 
-
   int nCurrentBoard = 0;
   byte response_frame[(MAXBYTES + 6)];
   byte response_frame2[(MAXBYTES + 6)];
 
   InitDevices();
 
-  //WriteReg(0, SYSFLT1_FLT_RST, 0xFFFFFF, 3, FRMWRT_ALL_NR); // reset system faults
-  //WriteReg(0, SYSFLT1_FLT_MSK, 0xFFFFFF, 3, FRMWRT_ALL_NR);
+  // WriteReg(0, SYSFLT1_FLT_RST, 0xFFFFFF, 3, FRMWRT_ALL_NR); // reset system faults
+  // WriteReg(0, SYSFLT1_FLT_MSK, 0xFFFFFF, 3, FRMWRT_ALL_NR);
   WriteReg(0, CONTROL2, 0x10, 1, FRMWRT_ALL_NR); // tsref activo
 
   // SET UP MAIN ADC
