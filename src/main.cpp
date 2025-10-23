@@ -381,7 +381,6 @@ void loop()
   stsCorrienteCarga = sensor1.calcularCorrienteS1(adcCurrentValue);
   stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
   // stsAMPOK=true;
-
   static int contFails = 0;
   int resReadVoltages = readVoltages2(stsNumBytesOK);
   if (resReadVoltages == 0)
@@ -408,6 +407,7 @@ void loop()
 
   procesarComandoSerial(corrienteCarga, cmdCharge, cmdResetFail, stsNumBytesOK);
 
+    stsAMPOK=true; //****COMENTAR */
   bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
   stsFail = failCondition;
 
@@ -457,7 +457,7 @@ void loop()
     //   Serial.println((String)"Current= "+stsCorrienteCarga+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
     //   Serial.println(sensor1.getVoltaje(adcCurrentValue),6);
     //  Serial.println((String)"start_charge"+stsStartCharge);
-    // Serial.println((String)"FAIL: "+ stsFail);
+    Serial.println((String)"FAIL: "+ stsFail);
     // CAN.printByteArray(stsChargerByte,8);
     // Serial.println(t);
   }
@@ -1234,7 +1234,7 @@ void setupExclusions(bool cmdFillWithInitialErrors)
   // Excluir sensor de voltaje del módulo 0, sensor 5
  // voltExclusionList.insert({.idModule = 0, .idVolt = 5});
   // Excluir sensor de voltaje del módulo 2, sensor 10
-  voltExclusionList.insert({.idModule = 2, .idVolt = 10});
+  //voltExclusionList.insert({.idModule = 2, .idVolt = 10});
 
   // Excluir sensor de temperatura del módulo 1, sensor 1
   //tempExclusionList.insert({.idModule = 1, .idNTC = 7});
