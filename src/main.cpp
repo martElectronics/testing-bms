@@ -24,6 +24,7 @@ float stsVoltCells[12][11];
 float stsTempCells[12][9];
 
 unsigned int numCRCFails = 0;
+unsigned int numCOMMFails =0;
 bool holdBMSOK = true;
 byte stsNumAutoadressedDevices = 0;
 
@@ -61,8 +62,10 @@ void checkFails(bool &ok);
 /**
 Permite configurar alguna excepción (de tensión o temperatura) para que no se detecte como fallo al realizar la lectura.
 La función checkFails() la ignora a la hora de notificar si hay algún fallo o no (tampoco lo indica en los arrays de fallos)
+Si se pone cmdFillWithInitialErrors a true, se añaden automáticamente a la lista de exclusión las temperaturas y voltajes erróneos al iniciar el programa
+Usar tempExclusionList.insert({.idModule = 1, .idNTC = 7}); para añadir exclusiones personalizadas (módulo 2 NTC 8)
 */
-void setupExclusions();
+void setupExclusions(bool cmdFillWithInitialErrors);
 
 /**
 Envía el mensaje por CAN necesario al cargador para iniciar y detener la carga
@@ -343,7 +346,9 @@ void setup()
   readVoltages2(okk);
   checkFails(okk);
   printFailResults();
-  // setupExclusions();
+
+  tempExclusionList.insert({.idModule = 1, .idNTC = 7});
+  setupExclusions(false);
   // printExclusionLists();
 
   pixels.clear(); // Set all pixel colors to 'off'
@@ -391,6 +396,7 @@ void loop()
   else if (resReadVoltages == -1)
   {
     contFails++;
+    numCOMMFails++;
     Serial.print("*********CONT = ");
     Serial.println(contFails);
     if (contFails > 5)
@@ -1222,17 +1228,20 @@ void configBMS()
   delay(3 * TOTALBOARDS + 901); // 3us of re-clocking delay per board + 901us waiting for first ADC conversion to complete
 }
 
-void setupExclusions()
+void setupExclusions(bool cmdFillWithInitialErrors)
 {
   Serial.println("Configurando listas de exclusión...");
   // Excluir sensor de voltaje del módulo 0, sensor 5
-  voltExclusionList.insert({.idModule = 0, .idVolt = 5});
+ // voltExclusionList.insert({.idModule = 0, .idVolt = 5});
   // Excluir sensor de voltaje del módulo 2, sensor 10
   voltExclusionList.insert({.idModule = 2, .idVolt = 10});
 
   // Excluir sensor de temperatura del módulo 1, sensor 1
-  tempExclusionList.insert({.idModule = 1, .idNTC = 1});
+  //tempExclusionList.insert({.idModule = 1, .idNTC = 7});
   Serial.printf("Exclusiones configuradas: %u de voltaje, %u de temperatura.\n", voltExclusionList.size(), tempExclusionList.size());
+
+
+  //Añade automáticamente a la lista de exclusión las temperaturas y voltajes erróneos al iniciar el programa
 
   if (true)
   {

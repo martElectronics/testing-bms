@@ -8,7 +8,7 @@ extern byte stsNumAutoadressedDevices;
 
 // User defines
 #define TOTALBOARDS 8   //MUST SET: total boards in the stack
-#define BAUDRATE  125000    //set global baudrate   //a 500000 tarda 340ms en leer todas las tensiones
+#define BAUDRATE  250000    //set global baudrate   //a 500000 tarda 340ms en leer todas las tensiones
 #define MAXBYTES  6*2        //6 CELLS, 2 byteS EACH
 #define Wake_pin  18         //Wake up pin number in ESP32 (4 original)  //pin 18 en perforada   //pin7 en bmsMaster
 #define Fault_pin 2          //Fault pin number in ESP32
