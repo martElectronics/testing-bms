@@ -325,25 +325,53 @@ bool AutoAddress()
     }
     else
     {
-        // a. Set ALL devices as Stack (CONFIG 0x02) 
-        WriteReg(0, CONFIG, 0x02, 1, FRMWRT_ALL_NR); 
-        delay(t_ms);
+        // // a. Set ALL devices as Stack (CONFIG 0x02) 
+        // WriteReg(0, CONFIG, 0x02, 1, FRMWRT_ALL_NR); 
+        // delay(t_ms);
 
-        // b. Overwrite Device 0 as Base (CONFIG 0x00) [cite: 207]
-        WriteReg(0, CONFIG, 0x00, 1, FRMWRT_SGL_NR); 
-        delay(t_ms);
+        // // b. Overwrite Device 0 as Base (CONFIG 0x00) [cite: 207]
+        // WriteReg(0, CONFIG, 0x00, 1, FRMWRT_SGL_NR); 
+        // delay(t_ms);
 
-        // c. Overwrite Top Device as Top of Stack (CONFIG 0x03) [cite: 208]
-        WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR);
+        // // c. Overwrite Top Device as Top of Stack (CONFIG 0x03) [cite: 208]
+        // WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR);
+
+        WriteReg(0, CONFIG, 0x00, 1, FRMWRT_SGL_NR);  //base
+
+		for (nCurrentBoard = 1; nCurrentBoard < (TOTALBOARDS-1); nCurrentBoard++)
+    	{
+        	WriteReg(nCurrentBoard, CONFIG, 0x02, 1, FRMWRT_SGL_NR); //Stack
+			delay(t_ms);
+			Serial.println((String)"Setting "+ nCurrentBoard);
+    	}
+		
+        WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR); //top of stack
+        delay(t_ms);
     }
     delay(t_ms);
 
 
-    // 6. Final dummy read (broadcast read) to ECC_TEST (0x011D) to finish synchronizing DLL [cite: 251, 254]
-	// This is typically the last addressed device to acknowledge the sync
-    ReadReg(0, ECC_TEST, response_frame2, 1, 0, FRMWRT_ALL_R); 
-    delay(t_ms);
+    // // 6. Final dummy read (broadcast read) to ECC_TEST (0x011D) to finish synchronizing DLL [cite: 251, 254]
+	// // This is typically the last addressed device to acknowledge the sync
+    // ReadReg(0, ECC_TEST, response_frame2, 1, 0, FRMWRT_ALL_R); 
+    // delay(t_ms);
     
+    for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++)
+    {
+        //dummy read from ECC_TEST (sync DLL)
+    	ReadReg(nCurrentBoard, ECC_TEST, response_frame2, 1, 0, FRMWRT_SGL_R);
+		delay(t_ms);
+		Serial.println((String)"Getting "+ nCurrentBoard);
+    }
+
+    
+
+	WriteReg(0, DAISY_CHAIN_CTRL, 0x0D, 1, FRMWRT_SGL_NR);  //base
+	delay(t_ms);
+	WriteReg(1, COMM_CTRL, 0x04, 1, FRMWRT_STK_NR);  //stack
+	delay(t_ms);
+	WriteReg((TOTALBOARDS - 1), DAISY_CHAIN_CTRL, 0x32, 1, FRMWRT_SGL_NR);  //Top
+	delay(t_ms);
 
     // 7. OPTIONAL: Verify address and implicitly check communication by reading DEVADD_USR (0x0104)
     bool ok = true;

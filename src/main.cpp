@@ -479,7 +479,7 @@ else
  // Serial.println(millis()-tTotal);
 
  //Serial.println(stsTempCells[0][1]);
- mostrarDatosDetalladosTemperaturas(0);
+ //mostrarDatosDetalladosTemperaturas(0);
 }
 
 void debug()
