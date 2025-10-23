@@ -521,4 +521,8 @@ para configurar los ADC, activar las entradas analógicas y borrar los fallos qu
 */
 void configBMS();
 
+
+void readAndDisplaySingleICRegisters(uint8_t deviceID);
+void readAndPrintSingleRegister(uint8_t deviceID, uint16_t regAddress);
+
 #endif

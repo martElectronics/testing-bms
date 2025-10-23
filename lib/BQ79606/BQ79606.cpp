@@ -905,3 +905,168 @@ bool bq79606_verify_crc(const uint8_t *received_frame, int frame_length) {
 
     return (calculated_crc == received_crc);
 }
+
+
+// Define the starting address and length for the read block
+#define START_ADDR_INFO 0x0200 // Starting with PARTID register
+#define LEN_READ_INFO 81       // Reading up to AUX_AVAO_REFL (0x0250)
+#define MAX_BUFFER_SIZE (LEN_READ_INFO + 6)
+
+/**
+ * Reads a contiguous block of status/ADC registers from a single BQ79606A-Q1 IC
+ * and prints the results to the Serial Monitor.
+ *
+ * @param deviceID The address of the target BQ79606A-Q1 device (0 to TOTALBOARDS-1).
+ */
+void readAndDisplaySingleICRegisters(uint8_t deviceID)
+{
+  uint8_t readBuffer[MAX_BUFFER_SIZE] = {0};
+  int bytesRead = 0;
+  uint16_t currentAddress = START_ADDR_INFO;
+
+  Serial.println("\n--- Reading Status and ADC Registers (0x0200 to 0x0250) ---");
+  Serial.printf("Target Device ID: %u\n", deviceID);
+
+  // 1. Execute Single Device Read for 81 bytes
+  bytesRead = ReadReg(
+      deviceID,
+      START_ADDR_INFO,
+      readBuffer,
+      LEN_READ_INFO,
+      0,           // Timeout parameter ignored for this example
+      FRMWRT_SGL_R // Single Device Read
+  );
+
+  if (bytesRead <= 0)
+  {
+    Serial.printf("ERROR: Failed to read registers. ReadReg returned %d bytes.\n", bytesRead);
+    if (bytesRead == -1)
+    {
+      Serial.println("Possible: Timeout Error or No device found.");
+    }
+    return;
+  }
+
+  // 2. Check CRC to ensure data integrity
+  if (!CheckCRC(readBuffer, bytesRead))
+  {
+    Serial.println("ERROR: CRC check failed on received data. Data may be corrupted.");
+    return;
+  }
+
+  // 3. Process and print the received data
+  // The actual data starts at index 4 (after Init Byte, Device ID, and 2x Reg Address)
+  Serial.println("Address | Hex Value | Register");
+  Serial.println("-------------------------------------");
+
+  for (int i = 0; i < LEN_READ_INFO; ++i)
+  {
+    uint8_t dataByte = readBuffer[4 + i]; // Data starts at buffer index 4
+
+    // Print Address and Value
+    Serial.printf("0x%04X  |  0x%02X   | ", currentAddress + i, dataByte);
+
+    // Print Register Name (using a partial switch for illustration)
+    switch (currentAddress + i)
+    {
+    case PARTID:
+      Serial.println("PARTID (Device Revision)");
+      break;
+    case SYS_FAULT1:
+      Serial.println("SYS_FAULT1 (System Fault 1)");
+      break;
+    case SYS_FAULT2:
+      Serial.println("SYS_FAULT2 (System Fault 2)");
+      break;
+    case DEV_STAT:
+      Serial.println("DEV_STAT (Device Status)");
+      break;
+    case FAULT_SUM:
+      Serial.println("FAULT_SUM (Fault Summary)");
+      break;
+    case VCELL1H:
+      Serial.println("VCELL1H (Cell 1 Voltage High)");
+      break;
+    case VCELL1L:
+      Serial.println("VCELL1L (Cell 1 Voltage Low)");
+      break;
+    case AUX_BATH:
+      Serial.println("AUX_BATH (Stack Voltage High)");
+      break;
+    case AUX_BATL:
+      Serial.println("AUX_BATL (Stack Voltage Low)");
+      break;
+    case AUX_AVDDH:
+      Serial.println("AUX_AVDDH (AVDD LDO Voltage High)");
+      break;
+    case AUX_CVDDH:
+      Serial.println("AUX_CVDDH (CVDD LDO Voltage High)");
+      break;
+    case AUX_AVAOH:
+      Serial.println("AUX_AVAOH (AVAO_REF Voltage High)");
+      break;
+    default:
+      Serial.println("");
+      break;
+    }
+  }
+  Serial.println("-------------------------------------");
+  Serial.println("--- Register Read Complete ---");
+}
+
+/**
+ * @brief Reads the content of a single, one-byte register from the BQ79606A-Q1
+ * and prints the result to the Serial Monitor.
+ *
+ * @param deviceID The address of the target BQ79606A-Q1 device (0 to TOTALBOARDS-1).
+ * @param regAddress The 16-bit address of the register to read (e.g., 0x0201 for SYS_FAULT1).
+ */
+void readAndPrintSingleRegister(uint8_t deviceID, uint16_t regAddress)
+{
+  uint8_t readBuffer[7] = {0};
+  const uint8_t dataLength = 1; // We are reading exactly one byte
+  int bytesRead = 0;
+
+  Serial.printf("--- Reading Register 0x%04X (Device ID: %u) ---\n", regAddress, deviceID);
+
+  // 1. Execute Single Device Read (Requesting 1 byte)
+  bytesRead = ReadReg(
+      deviceID,
+      regAddress,
+      readBuffer,
+      dataLength,
+      0, // Timeout ignored for this example
+      FRMWRT_SGL_R);
+
+  if (bytesRead <= 0)
+  {
+    Serial.printf("ERROR: Failed to read register. ReadReg returned %d bytes.\n", bytesRead);
+    if (bytesRead == -1)
+    {
+      Serial.println("CAUSE: Communication timeout or device non-responsive.");
+    }
+    return;
+  }
+
+  // Check for the minimum expected response size (1 data byte + 6 overhead = 7 bytes)
+  if (bytesRead < 7)
+  {
+    Serial.printf("ERROR: Incomplete response. Expected at least 7 bytes, received %d.\n", bytesRead);
+    return;
+  }
+
+  // 2. Check CRC to ensure data integrity
+  if (!CheckCRC(readBuffer, bytesRead))
+  {
+    Serial.println("ERROR: CRC check failed on received data. Data corrupted.");
+    return;
+  }
+
+  // 3. Extract and print the data
+  // The single byte of data is always at index 4 of the successful response frame.
+  uint8_t registerValue = readBuffer[4];
+
+  Serial.printf("  0x%04X: Value = 0x%02X (Binary: 0b%s)\n",
+                regAddress, registerValue, String(registerValue, 2).c_str());
+  Serial.println("--- Read Complete ---");
+}
