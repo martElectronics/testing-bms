@@ -2,7 +2,7 @@
 // #include <BQ79606.h>
 #include "BQ79606.h"
 #include <MART_CAN.h>
-#include <set>
+#include <global.h>
 #include <Adafruit_NeoPixel.h>
 #include "SensorCorriente.cpp"
 
@@ -126,36 +126,6 @@ void readVoltages();
 
 
 
-// Estructura para definir un punto de exclusión.
-// Estructura y lista para excluir sensores de VOLTAJE
-struct VoltExclusionPoint
-{
-  int idModule;
-  int idVolt; // Índice del sensor de voltaje
-
-  bool operator<(const VoltExclusionPoint &other) const
-  {
-    if (idModule != other.idModule)
-      return idModule < other.idModule;
-    return idVolt < other.idVolt;
-  }
-};
-std::set<VoltExclusionPoint> voltExclusionList;
-
-// Estructura y lista para excluir sensores de TEMPERATURA
-struct TempExclusionPoint
-{
-  int idModule;
-  int idNTC; // Índice del sensor de temperatura (NTC)
-
-  bool operator<(const TempExclusionPoint &other) const
-  {
-    if (idModule != other.idModule)
-      return idModule < other.idModule;
-    return idNTC < other.idNTC;
-  }
-};
-std::set<TempExclusionPoint> tempExclusionList;
 
 //******CHARGE    */
 unsigned long idStsCharger = 0x18FF50E5;
