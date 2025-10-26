@@ -13,7 +13,7 @@ Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 CAN_BUS CAN(HardwareType::Transciever, MCP_SPEED_500, 2, 10);
 
-// BMS
+//******BMS
 //  --- Configuración de Dimensiones de Arrays ---
 const int MAX_MODULES = TOTALBOARDS / 2;
 const int SENSORS_PER_MODULE_VOLT = 11;
@@ -23,20 +23,36 @@ const int SENSORS_PER_MODULE_TEMP = 9;
 float stsVoltCells[12][11];
 float stsTempCells[12][9];
 
+// Estado de la comunicación
 unsigned int numCRCFails = 0;
 unsigned int numCOMMFails =0;
-bool holdBMSOK = true;
+bool holdBMSOK = false; //!!!!!! CUIDADO !!! Si esta variable está a true, se ignoran los fallos del BMS
 byte stsNumAutoadressedDevices = 0;
-
-// --- Arrays de Resultados (Fallas) ---
-bool stsVoltCellsFail[MAX_MODULES][SENSORS_PER_MODULE_VOLT];
-bool stsTempCellsFail[MAX_MODULES][SENSORS_PER_MODULE_TEMP];
 
 // --- Márgenes Parametrizables ---
 const float MIN_VALID_VOLTAGE = 2.8f;
 const float MAX_VALID_VOLTAGE = 4.2f;
 const float MIN_VALID_TEMP = 5.0f;
-const float MAX_VALID_TEMP = 60.0f;
+const float MAX_VALID_TEMP = 50.0f;
+
+// --- Arrays de Resultados (Fallas) ---
+bool stsVoltCellsFail[MAX_MODULES][SENSORS_PER_MODULE_VOLT];
+bool stsTempCellsFail[MAX_MODULES][SENSORS_PER_MODULE_TEMP];
+
+
+//****** CARGADOR    */
+unsigned long idStsCharger = 0x18FF50E5;
+unsigned long idCmdCharger = 0x1806E5F4;
+unsigned long idPrueba = 0x30;
+byte stsChargerByte[8];
+byte cmdChargerByte[8];
+byte cmdPrueba[8];
+
+//****** AMPERIMETRO    */
+const int PIN_CURRENT_1 = 14;
+SensorCorriente sensor1;
+double stsCorrienteCarga = 0;
+
 
 /**
 Lee las tensiones de las celdas y los voltajes de los NTC y las guarda en: "stsVoltCells" y "stsTempCells".
@@ -125,26 +141,13 @@ No usada
 void readVoltages();
 
 
-
-
-//******CHARGE    */
-unsigned long idStsCharger = 0x18FF50E5;
-unsigned long idCmdCharger = 0x1806E5F4;
-unsigned long idPrueba = 0x30;
-byte stsChargerByte[8];
-byte cmdChargerByte[8];
-byte cmdPrueba[8];
-const int PIN_CURRENT_1 = 14;
-SensorCorriente sensor1;
-double stsCorrienteCarga = 0;
-
 void setup()
 {
 
   bool ok = false;
 
   configBMS();
-  digitalWrite(BMS_OK, true);
+  digitalWrite(BMS_OK, false);
   while (CAN.error == 1)
   {
     Serial.println("Error Initializing EScP32Can...");
@@ -177,18 +180,25 @@ void loop()
   static float corrienteCarga = 0;
   static bool flagShow = false;
   bool stsChargerOK = false;
+  static int contFails = 0;
+
+  //** CAN RECEIVE */
 
   CAN.receive();
   CAN.getPacket(idStsCharger, stsChargerByte, 8, false);
-  stsChargerOK = (stsChargerByte[4] == 0);
-  stsStartCharge = !digitalRead(START_PIN);
 
+  //** READ GPIO */
+  stsStartCharge = !digitalRead(START_PIN);
+  int adcCurrentValue = analogRead(AMP_PIN);
+
+
+  //** PROCESS DATA */
+
+  stsChargerOK = (stsChargerByte[4] == 0);
+  stsCorrienteCarga = sensor1.calcularCorrienteS1(adcCurrentValue);
   // 0.85V lectura 1.73V real a
   // 1.73V a 5V   R=2.89
-  int adcCurrentValue = analogRead(AMP_PIN);
-  stsCorrienteCarga = sensor1.calcularCorrienteS1(adcCurrentValue);
   stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
-  static int contFails = 0;
   int resReadVoltages = readVoltages2(stsNumBytesOK);
   if (resReadVoltages == 0)
   {
@@ -220,7 +230,6 @@ void loop()
 
   if (!holdBMSOK)
   {
-
     if (stsFail)
     {
       cmdCharge = 0;
@@ -238,18 +247,31 @@ void loop()
     digitalWrite(BMS_OK, true);
   }
 
+//** CHARGE CONTROL*/
+
   controlCharge(350, corrienteCarga, cmdCharge);
-
-  CAN.send();
-
-  // MOSTRAR UNA SOLA VEZ POR SERIAL CADA VEZ QUE FALLE
-  if (stsFail && !flagShow)
+  if (!stsChargerOK)
   {
-    printFailResults();
-    flagShow = 1;
+    pixels.setPixelColor(0, pixels.Color(255, 0, 0));
+    pixels.show(); // Send the updated pixel colors to the hardware.
+  }
+  else if (stsChargerOK && !cmdCharge)
+  {
+    pixels.setPixelColor(0, pixels.Color(0, 0, 0));
+    pixels.show(); // Send the updated pixel colors to the hardware.
+  }
+  else if (stsChargerOK && cmdCharge)
+  {
+    pixels.setPixelColor(0, pixels.Color(0, 255, 0));
+    pixels.show(); // Send the updated pixel colors to the hardware.
   }
 
-  static int t = millis();
+//** CAN SEND */
+    CAN.send();
+
+
+//** DEBUG */
+    static int t = millis();
   if ((millis() - t) >= 1000)
   {
     // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
@@ -267,39 +289,18 @@ void loop()
     Serial.println((String)"FAIL: "+ stsFail);
     // CAN.printByteArray(stsChargerByte,8);
     // Serial.println(t);
-  }
-
-  if (((millis() - t) >= 1000) && !stsFail)
-  {
-    // showChargeData();
-  }
-
-  if (!stsChargerOK)
-  {
-    pixels.setPixelColor(0, pixels.Color(255, 0, 0));
-    pixels.show(); // Send the updated pixel colors to the hardware.
-  }
-  else if (stsChargerOK && !cmdCharge)
-  {
-    pixels.setPixelColor(0, pixels.Color(0, 0, 0));
-    pixels.show(); // Send the updated pixel colors to the hardware.
-  }
-  else if (stsChargerOK && cmdCharge)
-  {
-    pixels.setPixelColor(0, pixels.Color(0, 255, 0));
-    pixels.show(); // Send the updated pixel colors to the hardware.
-  }
-  // CAN.printReceivedIds();
+      // CAN.printReceivedIds();
   // CAN.printByteArray(stsChargerByte,8);
   // Serial.println(millis()-tTotal);
 
   // Serial.println(stsTempCells[0][1]);
   // mostrarDatosDetalladosTemperaturas(0);
+  }
 }
 
 void debug()
 {
-  CAN.printByteArray(stsChargerByte, 8);
+  //CAN.printByteArray(stsChargerByte, 8);
   // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail);
 }
 
@@ -634,7 +635,7 @@ void controlCharge(float maxVolt, float maxCurrent, bool start)
   cmdChargerByte[3] = curr_low_byte;
   cmdChargerByte[4] = (byte)!start;
 
-  if (maxVolt > 500)
+  if (maxVolt > 555)
     maxVolt = 500;
   CAN.setPacket(idCmdCharger, cmdChargerByte, 8, false);
 }
