@@ -49,7 +49,6 @@ byte cmdChargerByte[8];
 byte cmdPrueba[8];
 
 //****** AMPERIMETRO    */
-const int PIN_CURRENT_1 = 14;
 SensorCorriente sensor1;
 double stsCorrienteCarga = 0;
 
@@ -139,6 +138,9 @@ void printVoltages();
 No usada
 */
 void readVoltages();
+
+
+void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]) ;
 
 
 void setup()
@@ -286,7 +288,7 @@ void loop()
     //   Serial.println((String)"Current= "+stsCorrienteCarga+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
     //   Serial.println(sensor1.getVoltaje(adcCurrentValue),6);
     //  Serial.println((String)"start_charge"+stsStartCharge);
-    Serial.println((String)"FAIL: "+ stsFail);
+   // Serial.println((String)"FAIL: "+ stsFail);
     // CAN.printByteArray(stsChargerByte,8);
     // Serial.println(t);
       // CAN.printReceivedIds();
@@ -435,6 +437,10 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     {
       readAndPrintSingleRegister(2, 0x0023);
       // --- Comando desconocido ---
+    }
+     else if (comando == "e")
+    {
+      imprimirDatosCSV(stsVoltCells,stsTempCells);
     }
 
     else if (comando.length() > 0)
@@ -1164,5 +1170,64 @@ void printExclusionLists()
     {
       Serial.printf("-> Excluido: Módulo %d, Sensor de Temperatura %d\n", point.idModule, point.idNTC);
     }
+  }
+}
+
+
+/**
+ * @brief Imprime los datos de voltaje y temperatura en formato CSV al monitor serie.
+ * * Utiliza punto y coma (;) como delimitador de columnas y formatea los nombres
+ * de módulo (M01-M12) y los encabezados (V1-V11, T1-T9) según lo especificado.
+ *
+ * @param stsVoltCells Array de 12x11 con los datos de voltaje de las celdas.
+ * @param stsTempCells Array de 12x9 con los datos de temperatura de las celdas.
+ */
+void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]) {
+  
+  // --- 1. Imprimir la fila de encabezado ---
+  
+  Serial.print("Modulo");
+  
+  // Imprimir encabezados de Voltaje (V1 a V11)
+  for (int j = 0; j < 11; j++) {
+    Serial.print(";V");
+    Serial.print(j + 1);
+  }
+  
+  // Imprimir encabezados de Temperatura (T1 a T9)
+  for (int j = 0; j < 9; j++) {
+    Serial.print(";T");
+    Serial.print(j + 1);
+  }
+  
+  // Terminar la línea del encabezado
+  Serial.println();
+
+  // --- 2. Imprimir las filas de datos (una por módulo) ---
+  
+  for (int i = 0; i < 12; i++) { // Iterar sobre cada módulo (filas 0-11)
+    
+    // Imprimir el nombre del módulo (M01, M02, ..., M12)
+    Serial.print("M");
+    int moduloNum = i + 1;
+    if (moduloNum < 10) {
+      Serial.print("0"); // Añadir cero inicial para M01-M09
+    }
+    Serial.print(moduloNum);
+    
+    // Imprimir los 11 datos de voltaje para este módulo
+    for (int j = 0; j < 11; j++) {
+      Serial.print(";");
+      Serial.print(stsVoltCells[i][j]);
+    }
+    
+    // Imprimir los 9 datos de temperatura para este módulo
+    for (int j = 0; j < 9; j++) {
+      Serial.print(";");
+      Serial.print(stsTempCells[i][j]);
+    }
+    
+    // Terminar la línea de datos para este módulo
+    Serial.println();
   }
 }
