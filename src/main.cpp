@@ -33,7 +33,7 @@ byte stsNumAutoadressedDevices = 0;
 const float MIN_VALID_VOLTAGE = 2.8f;
 const float MAX_VALID_VOLTAGE = 4.2f;
 const float MIN_VALID_TEMP = 5.0f;
-const float MAX_VALID_TEMP = 50.0f;
+const float MAX_VALID_TEMP = 30.0f;
 
 // --- Arrays de Resultados (Fallas) ---
 bool stsVoltCellsFail[MAX_MODULES][SENSORS_PER_MODULE_VOLT];
@@ -197,10 +197,11 @@ void loop()
   //** PROCESS DATA */
 
   stsChargerOK = (stsChargerByte[4] == 0);
-  stsCorrienteCarga = sensor1.calcularCorrienteS1(adcCurrentValue);
-  // 0.85V lectura 1.73V real a
-  // 1.73V a 5V   R=2.89
-  stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
+  stsCorrienteCarga = sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
+
+  //stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
+  stsAMPOK= (abs(933- adcCurrentValue))>=200;
+
   int resReadVoltages = readVoltages2(stsNumBytesOK);
   if (resReadVoltages == 0)
   {
@@ -226,7 +227,7 @@ void loop()
 
   procesarComandoSerial(corrienteCarga, cmdCharge, cmdResetFail, stsNumBytesOK);
 
-    stsAMPOK=true; //****COMENTAR */
+    //stsAMPOK=true; //****COMENTAR */
   bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
   stsFail = failCondition;
 
@@ -251,7 +252,7 @@ void loop()
 
 //** CHARGE CONTROL*/
 
-  controlCharge(350, corrienteCarga, cmdCharge);
+  controlCharge(457, corrienteCarga, cmdCharge);
   if (!stsChargerOK)
   {
     pixels.setPixelColor(0, pixels.Color(255, 0, 0));
@@ -281,7 +282,7 @@ void loop()
     // readVoltages(stsVoltagesOK);
     // CAN.printByteArray(stsChargerByte,8);
     // printVoltages();
-    // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
+    Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
     t = millis();
     // bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
     //   Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK +" stsAMPOK= "+stsAMPOK);
