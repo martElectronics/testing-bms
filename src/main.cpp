@@ -200,7 +200,7 @@ void loop()
   stsCorrienteCarga = sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
 
   //stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
-  stsAMPOK= (abs(933- adcCurrentValue))>=200;
+  stsAMPOK= (abs(933- adcCurrentValue))<=200;
 
   int resReadVoltages = readVoltages2(stsNumBytesOK);
   if (resReadVoltages == 0)
@@ -224,10 +224,10 @@ void loop()
       contFails = 0;
     }
   }
+bool a; //basurilla
+  procesarComandoSerial(corrienteCarga, cmdCharge, cmdResetFail,a );
 
-  procesarComandoSerial(corrienteCarga, cmdCharge, cmdResetFail, stsNumBytesOK);
-
-    //stsAMPOK=true; //****COMENTAR */
+    stsAMPOK=true; //****COMENTAR */
   bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
   stsFail = failCondition;
 
@@ -278,16 +278,19 @@ void loop()
   if ((millis() - t) >= 1000)
   {
     // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
+   
     // showChargeData();
     // readVoltages(stsVoltagesOK);
     // CAN.printByteArray(stsChargerByte,8);
     // printVoltages();
-    Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
+    Serial.println((String)"stsamp= "+stsAMPOK+" stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK+" FAIL= "+failCondition);
+    //Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
     t = millis();
     // bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
     //   Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK +" stsAMPOK= "+stsAMPOK);
     //   Serial.println((String)"Current= "+stsCorrienteCarga+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
     //   Serial.println(sensor1.getVoltaje(adcCurrentValue),6);
+    Serial.println(adcCurrentValue);
     //  Serial.println((String)"start_charge"+stsStartCharge);
    // Serial.println((String)"FAIL: "+ stsFail);
     // CAN.printByteArray(stsChargerByte,8);
