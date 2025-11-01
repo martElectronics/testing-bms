@@ -15,7 +15,7 @@ extern byte stsNumAutoadressedDevices;
 #define BMS_OK    18          //BMS_OK pin number in ESP32 (letra O arriba)  //18 en bmsMaster //3 perforada
 #define BMS_RX    16         //UART RX pin for BMS (16 origial)
 #define BMS_TX    17         //UART TX pin for BMS (17 original)
-#define PWM_FANS  26         // estaba en 9 y coincidia con PIN_SDC
+#define PWM_FANS  37        
 #define AMP_PIN  10         
 #define START_PIN  5
 #define PIN_SDC  9
