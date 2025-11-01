@@ -52,6 +52,14 @@ byte cmdPrueba[8];
 SensorCorriente sensor1;
 double stsCorrienteCarga = 0;
 
+//****** PWM    */
+const int pwmChannel = 0;
+const int pwmPin = PWM_FANS;
+const int pwmFrequency = 5000;
+const int pwmResolution = 8;
+int pwmPorcentaje = 10;
+
+
 
 /**
 Lee las tensiones de las celdas y los voltajes de los NTC y las guarda en: "stsVoltCells" y "stsTempCells".
@@ -160,11 +168,14 @@ void setup()
   checkFails(okk);
   printFailResults();
 
-  tempExclusionList.insert({.idModule = 1, .idNTC = 7});
+  //tempExclusionList.insert({.idModule = 1, .idNTC = 7});
   setupExclusions(false);
   // printExclusionLists();
 
   pixels.clear(); // Set all pixel colors to 'off'
+
+  ledcSetup(pwmChannel, pwmFrequency, pwmResolution);
+  ledcAttachPin(pwmPin, pwmChannel);
 
   Serial.println((String) "INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura");
 }
@@ -179,7 +190,7 @@ void loop()
   static bool stsAMPOK = false;
   static bool cmdResetFail = false;
   static bool stsFail = false;
-  static float corrienteCarga = 0;
+  static float corrienteCargaTarget = 0;
   static bool flagShow = false;
   bool stsChargerOK = false;
   static int contFails = 0;
@@ -191,16 +202,25 @@ void loop()
 
   //** READ GPIO */
   stsStartCharge = !digitalRead(START_PIN);
-  int adcCurrentValue = analogRead(AMP_PIN);
 
-
+  //AMP
+  int adcCurrentValue = 0;
+  int n=200;
+  for(int i=0;i<n;i++)
+  {
+    adcCurrentValue += analogRead(AMP_PIN);
+    delayMicroseconds(100);
+  }
+  adcCurrentValue=adcCurrentValue/n;
   //** PROCESS DATA */
 
   stsChargerOK = (stsChargerByte[4] == 0);
-  stsCorrienteCarga = sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
+
+  //son 3 numeros de ADC por amperio
+  stsCorrienteCarga = abs(3007-adcCurrentValue)/3; //sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
 
   //stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
-  stsAMPOK= (abs(933- adcCurrentValue))<=200;
+  stsAMPOK= (stsCorrienteCarga<=16);
 
   int resReadVoltages = readVoltages2(stsNumBytesOK);
   if (resReadVoltages == 0)
@@ -220,14 +240,14 @@ void loop()
     Serial.println(contFails);
     if (contFails > 5)
     {
-      // configBMS();
+      //configBMS();
       contFails = 0;
     }
   }
 bool a; //basurilla
-  procesarComandoSerial(corrienteCarga, cmdCharge, cmdResetFail,a );
+  procesarComandoSerial(corrienteCargaTarget, cmdCharge, cmdResetFail,a );
 
-    stsAMPOK=true; //****COMENTAR */
+    //stsAMPOK=true; //****COMENTAR */
   bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
   stsFail = failCondition;
 
@@ -236,7 +256,7 @@ bool a; //basurilla
     if (stsFail)
     {
       cmdCharge = 0;
-      corrienteCarga = 0;
+      corrienteCargaTarget = 0;
       digitalWrite(BMS_OK, false);
     }
     else
@@ -252,7 +272,7 @@ bool a; //basurilla
 
 //** CHARGE CONTROL*/
 
-  controlCharge(457, corrienteCarga, cmdCharge);
+  controlCharge(456, corrienteCargaTarget, cmdCharge);
   if (!stsChargerOK)
   {
     pixels.setPixelColor(0, pixels.Color(255, 0, 0));
@@ -268,6 +288,12 @@ bool a; //basurilla
     pixels.setPixelColor(0, pixels.Color(0, 255, 0));
     pixels.show(); // Send the updated pixel colors to the hardware.
   }
+//** PWM CONTROL*/
+  if (pwmPorcentaje>100)   pwmPorcentaje=100;
+  else if(pwmPorcentaje<0 ) pwmPorcentaje=0;
+  float  pwmDutyCycleFloat=(pwmPorcentaje*1000.0)/(2550.0);
+  uint32_t pwmDutyCycle=static_cast<uint32_t>(pwmDutyCycleFloat);
+  ledcWrite(pwmChannel, pwmDutyCycle);
 
 //** CAN SEND */
     CAN.send();
@@ -277,37 +303,40 @@ bool a; //basurilla
     static int t = millis();
   if ((millis() - t) >= 1000)
   {
-    // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
+    // Serial.println((String)"I= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
    
     // showChargeData();
     // readVoltages(stsVoltagesOK);
     // CAN.printByteArray(stsChargerByte,8);
     // printVoltages();
-    Serial.println((String)"stsamp= "+stsAMPOK+" stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK+" FAIL= "+failCondition);
-    //Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
-    t = millis();
+
+  //   Serial.println((String)"stsamp= "+stsAMPOK+" stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK+" FAIL= "+failCondition);
+  //   Serial.println((String)"Itarget= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK+ " corriente actual= "+stsCorrienteCarga);
+  //  t = millis();
+
     // bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
     //   Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK +" stsAMPOK= "+stsAMPOK);
     //   Serial.println((String)"Current= "+stsCorrienteCarga+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
     //   Serial.println(sensor1.getVoltaje(adcCurrentValue),6);
-    Serial.println(adcCurrentValue);
+   // Serial.println(adcCurrentValue);
     //  Serial.println((String)"start_charge"+stsStartCharge);
    // Serial.println((String)"FAIL: "+ stsFail);
-    // CAN.printByteArray(stsChargerByte,8);
+    //CAN.printByteArray(stsChargerByte,8);
     // Serial.println(t);
-      // CAN.printReceivedIds();
+      //CAN.printReceivedIds();
   // CAN.printByteArray(stsChargerByte,8);
   // Serial.println(millis()-tTotal);
 
   // Serial.println(stsTempCells[0][1]);
   // mostrarDatosDetalladosTemperaturas(0);
+  //Serial.println();
   }
 }
 
 void debug()
 {
   //CAN.printByteArray(stsChargerByte, 8);
-  // Serial.println((String)"I= "+corrienteCarga+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail);
+  // Serial.println((String)"I= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail);
 }
 
 /**
@@ -730,8 +759,8 @@ int readVoltages2(bool &ok)
   ok = true;
   int returnValue = 0;
   // VARIABLES
-  byte response_frame[(MAXBYTES + 6)];
-  byte response_frame2[(MAXBYTES + 6)];
+  static byte response_frame[(MAXBYTES + 6)];
+  static byte response_frame2[(MAXBYTES + 6)];
   int currentBoard = 0;
   int res1 = 0, res2 = 0;
   int i = 0;
@@ -819,6 +848,7 @@ int readVoltages2(bool &ok)
         }
       }
     }
+    delay(1);
   }
   int tTotal = millis() - t;
   return returnValue;
@@ -830,8 +860,8 @@ void readVoltages(bool &ok)
   int t = millis();
   ok = true;
   // VARIABLES
-  byte response_frame[(MAXBYTES + 6)];
-  byte response_frame2[(MAXBYTES + 6)];
+  static byte response_frame[(MAXBYTES + 6)];
+  static byte response_frame2[(MAXBYTES + 6)];
   int currentBoard = 0;
   int res1 = 0, res2 = 0;
   int i = 0;
@@ -921,8 +951,8 @@ void printVoltages()
 
   delay(10);
   // VARIABLES
-  byte response_frame[(MAXBYTES + 6)];
-  byte response_frame2[(MAXBYTES + 6)];
+  static byte response_frame[(MAXBYTES + 6)];
+  static byte response_frame2[(MAXBYTES + 6)];
   int currentBoard = 0;
   int Bytesleidos = 0;
   int i = 0;
@@ -1018,8 +1048,8 @@ void configBMS()
   }
 
   int nCurrentBoard = 0;
-  byte response_frame[(MAXBYTES + 6)];
-  byte response_frame2[(MAXBYTES + 6)];
+  static byte response_frame[(MAXBYTES + 6)];
+  static byte response_frame2[(MAXBYTES + 6)];
 
   InitDevices();
 
