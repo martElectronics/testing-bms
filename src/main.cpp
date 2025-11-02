@@ -3,13 +3,11 @@
 #include "BQ79606.h"
 #include <MART_CAN.h>
 #include <global.h>
-#include <Adafruit_NeoPixel.h>
 #include "SensorCorriente.cpp"
 
 // LED
 #define LED_PIN 48
 #define LED_COUNT 1
-Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 CAN_BUS CAN(HardwareType::Transciever, 500, 2);
 
@@ -46,7 +44,6 @@ unsigned long idCmdCharger = 0x1806E5F4;
 unsigned long idPrueba = 0x30;
 byte stsChargerByte[8];
 byte cmdChargerByte[8];
-byte cmdPrueba[8];
 
 //****** AMPERIMETRO    */
 SensorCorriente sensor1;
@@ -101,6 +98,11 @@ Muestra las tensiones y temperaturas detalladas de cada módulo
 void mostrarDatosDetallados();
 
 /**
+Muestra las tensiones y temperaturas detalladas de cada módulo sin usar floats (ahorra RAM)
+*/
+void mostrarDatosDetalladosOptimizado();
+
+/**
 Muestra los datos de la carga
 */
 void showChargeData();
@@ -137,10 +139,6 @@ Imprime por el monitor serial la lista de exclusión configurada
 void printExclusionLists();
 
 
-/**
-No usada
-*/
-void readVoltages();
 
 
 void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]) ;
@@ -158,7 +156,7 @@ void setup()
   static int t=millis();
   pinMode(BMS_OK, OUTPUT);
   digitalWrite(BMS_OK,false);
-  Serial.println("Esperando letra 's'");
+  Serial.println(F("ESP S"));
   char receivedChar = 0; // Initialize to a non-target character
   while (receivedChar != TARGET_CHAR_TO_SDC) {
     
@@ -175,20 +173,19 @@ void setup()
 }
   while((millis()-t)<=10000)
   { 
-    Serial.println("ESPERANDO PARA MONITOREO");
+    Serial.println(F("W.M"));
     digitalWrite(BMS_OK,true);
   }
-
-
+  
 
   bool ok = false;
 
   configBMS();
   while (CAN.error == 1)
   {
-    Serial.println("Error Initializing EScP32Can...");
+    Serial.println(F("Er.CAN"));
   }
-  Serial.println("CAN OK");
+  Serial.println(F("CAN OK"));
   bool okk = false;
   readVoltages2(okk);
   checkFails(okk);
@@ -198,12 +195,11 @@ void setup()
   setupExclusions(false);
   // printExclusionLists();
 
-  pixels.clear(); // Set all pixel colors to 'off'
 
   ledcSetup(pwmChannel, pwmFrequency, pwmResolution);
   ledcAttachPin(pwmPin, pwmChannel);
 
-  Serial.println((String) "INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura");
+ // Serial.println(F( "INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura"));
 }
 
 void loop()
@@ -256,13 +252,13 @@ void loop()
   else if (resReadVoltages == 1)
   {
     numCRCFails++;
-    Serial.println("CRC error");
+    Serial.println(F("CRC error"));
   }
   else if (resReadVoltages == -1)
   {
     contFails++;
     numCOMMFails++;
-    Serial.print("*********CONT = ");
+    Serial.print(F("C.CRC = "));
     Serial.println(contFails);
     if (contFails > 5)
     {
@@ -299,21 +295,6 @@ bool a; //basurilla
 //** CHARGE CONTROL*/
 
   controlCharge(456, corrienteCargaTarget, cmdCharge);
-  if (!stsChargerOK)
-  {
-    pixels.setPixelColor(0, pixels.Color(255, 0, 0));
-    pixels.show(); // Send the updated pixel colors to the hardware.
-  }
-  else if (stsChargerOK && !cmdCharge)
-  {
-    pixels.setPixelColor(0, pixels.Color(0, 0, 0));
-    pixels.show(); // Send the updated pixel colors to the hardware.
-  }
-  else if (stsChargerOK && cmdCharge)
-  {
-    pixels.setPixelColor(0, pixels.Color(0, 255, 0));
-    pixels.show(); // Send the updated pixel colors to the hardware.
-  }
 //** PWM CONTROL*/
   if (pwmPorcentaje>100)   pwmPorcentaje=100;
   else if(pwmPorcentaje<0 ) pwmPorcentaje=0;
@@ -357,6 +338,9 @@ bool a; //basurilla
   // mostrarDatosDetalladosTemperaturas(0);
   //Serial.println();
   }
+
+
+
 }
 
 void debug()
@@ -400,7 +384,7 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
         valorFloatRef = floatStr.toFloat();
         valorBoolRef = (boolStr.toInt() == 1); // Convierte a bool (1=true, 0=false)
 
-        Serial.print(F("-> OK: Comando 'c' recibido. Nuevos valores: "));
+        Serial.print(F("-> OK: Coma 'c' rec: "));
         Serial.print(F("float = "));
         Serial.print(valorFloatRef);
         Serial.print(F(", bool = "));
@@ -409,7 +393,7 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       else
       {
         // Error si el formato no es el esperado
-        Serial.println(F("-> ERROR: Formato de comando 'c' incorrecto. Use: c,float,bool"));
+        Serial.println(F("-> ERROR: 'c'"));
       }
 
       // --- Comando 'i': ejecutar función I ---
@@ -427,11 +411,11 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       else if (resReadVoltages == 1)
       {
         numCRCFails++;
-        Serial.println("CRC error");
+        Serial.println(F("CRC error"));
       }
       else
       {
-        Serial.println("Read error");
+        Serial.println(F("Read error"));
       }
     }
     else if (comando == "l")
@@ -461,7 +445,7 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       // setupExclusions();
       // printExclusionLists();
       holdBMSOK = !holdBMSOK;
-      Serial.println((String) "hold bms = " + holdBMSOK);
+      //Serial.println((String) "hold bms = " + holdBMSOK);
 
       // --- Comando desconocido ---
     }
@@ -473,26 +457,24 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
 
     else if (comando == "a")
     {
-      Serial.println("AAAAAAAAAAAA");
       configBMS();
       // --- Comando desconocido ---
     }
     else if (comando == "b")
     {
-      Serial.println("BBBBBBBBBBBBBBBBBBBBBBBBB");
       CommSleepToWake();
       // --- Comando desconocido ---
     }
 
     else if (comando == "v")
     {
-      readAndDisplaySingleICRegisters(0);
+     // readAndDisplaySingleICRegisters(0);
       // --- Comando desconocido ---
     }
 
     else if (comando == "w")
     {
-      readAndPrintSingleRegister(2, 0x0023);
+      //readAndPrintSingleRegister(2, 0x0023);
       // --- Comando desconocido ---
     }
      else if (comando == "e")
@@ -502,12 +484,10 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
 
     else if (comando.length() > 0)
     {
-      Serial.print(F("-> ERROR: Comando desconocido: '"));
-      Serial.print(comando);
-      Serial.println(F("'"));
+      Serial.print(F("-> ERR. Com desc:'"));
+      //Serial.print(comando);
+      //Serial.println(F("'"));
     }
-
-    Serial.println("i = mostrar datos módulos, f= forzar fallo, r=reset fallo,l= lista de fallos, s= crear lista de exclusión");
   }
 }
 
@@ -524,8 +504,8 @@ void mostrarDatosDetalladosTemperaturas(int i)
 void mostrarDatosDetallados()
 {
 
-  Serial.println(F("\n--- Vista Detallada por Modulo ---")); // F() macro ahorra RAM
-  Serial.println(F("Modulo | Voltajes (V)                  | Temperaturas (C)"));
+  //Serial.println(F("\n--- Vista Detallada por Modulo ---")); // F() macro ahorra RAM
+  //Serial.println(F("Modulo | Voltajes (V)                  | Temperaturas (C)"));
   Serial.println(F("            1    2    3    4    5    6    7    8    9   10    11        1    2    3    4    5    6    7    8    9  "));
   Serial.println(F("-----------------------------------------------------------------------------------------------------------------"));
 
@@ -558,6 +538,80 @@ void mostrarDatosDetallados()
     }
 
     Serial.println(); // Salto de línea para el siguiente módulo
+  }
+  Serial.println(F("------------------------------------------------------------------"));
+}
+
+void mostrarDatosDetalladosOptimizado()
+{
+ // Serial.println(F("\n--- Vista Detallada por Modulo ---"));
+ // Serial.println(F("Modulo | Voltajes (V)                  | Temperaturas (C)"));
+  Serial.println(F("            1    2    3    4    5    6    7    8    9   10    11        1    2    3    4    5    6    7    8    9  "));
+  Serial.println(F("-----------------------------------------------------------------------------------------------------------------"));
+
+  for (int i = 0; i < TOTALBOARDS / 2; i++)
+  {
+    Serial.print("M");
+    if (i < 9)
+    {
+      Serial.print("0");
+    }
+    Serial.print(i + 1);
+    Serial.print("   | V: ");
+
+    // --- OPTIMIZED VOLTAGE PRINTING ---
+    for (int j = 0; j < 11; j++)
+    {
+      // 1. Get the float value
+      float v = stsVoltCells[i][j];
+      
+      // 2. Handle negative sign if necessary
+      if (v < 0) {
+        Serial.print("-");
+        v = -v; 
+      }
+
+      // 3. Convert to integer with rounding (e.g., 3.1415 -> 314)
+      long v_int = (long)(v * 100.0 + 0.5); 
+
+      // 4. Print the integer part (e.g., 314 / 100 = 3)
+      Serial.print(v_int / 100);
+      Serial.print(".");
+
+      // 5. Print the decimal part (e.g., 314 % 100 = 14)
+      long v_dec = v_int % 100;
+      if (v_dec < 10) Serial.print("0"); // Add leading zero for values like 3.01
+      Serial.print(v_dec);
+      Serial.print(" ");
+    }
+
+    Serial.print("| T: ");
+
+    // --- OPTIMIZED TEMPERATURE PRINTING ---
+    for (int j = 0; j < 9; j++)
+    {
+      // 1. Get the float value
+      float t = stsTempCells[i][j];
+
+      // 2. Handle negative sign
+      if (t < 0) {
+        Serial.print("-");
+        t = -t;
+      }
+      
+      // 3. Convert to integer with rounding (e.g., 25.78 -> 258)
+      long t_int = (long)(t * 10.0 + 0.5);
+
+      // 4. Print the integer part (e.g., 258 / 10 = 25)
+      Serial.print(t_int / 10);
+      Serial.print(".");
+
+      // 5. Print the decimal part (e.g., 258 % 10 = 8)
+      Serial.print(t_int % 10);
+      Serial.print(" ");
+    }
+
+    Serial.println(); // Salto de línea
   }
   Serial.println(F("------------------------------------------------------------------"));
 }
@@ -878,105 +932,12 @@ int readVoltages2(bool &ok)
   return returnValue;
 }
 
-void readVoltages(bool &ok)
-
-{
-  int t = millis();
-  ok = true;
-  // VARIABLES
-  static byte response_frame[(MAXBYTES + 6)];
-  static byte response_frame2[(MAXBYTES + 6)];
-  int currentBoard = 0;
-  int res1 = 0, res2 = 0;
-  int i = 0;
-  int contVoltCells = 0, contVoltNTC = 0, idModule = 0;
-  // reset variables
-  memset(response_frame, 0, sizeof(response_frame));
-  i = 0;
-  currentBoard = 0;
-  WriteReg(0, CONTROL2, 0x13, 1, FRMWRT_ALL_NR);
-  delay(100);
-
-  // PARSE, FORMAT, AND PRINT THE DATA
-  for (currentBoard = 0; currentBoard < TOTALBOARDS; currentBoard++)
-  {
-    idModule = currentBoard / 2;
-    memset(response_frame, 0, sizeof(response_frame));
-    memset(response_frame2, 0, sizeof(response_frame));
-    // read back data (6 cells and 2 bytes each cell)
-    res1 = ReadReg(currentBoard, VCELL1H, response_frame, MAXBYTES, 0, FRMWRT_SGL_R);
-    res2 = ReadReg(currentBoard, AUX_GPIO1H, response_frame2, MAXBYTES, 0, FRMWRT_SGL_R);
-    if ((res1 <= 0) || (res2 <= 0))
-    {
-      ok = false;
-      Serial.println("Error de lectura numBytes=0");
-    }
-
-    // Cambio al módulo siguiente, reset de contadores
-    if ((currentBoard % 2) == 0)
-    {
-      contVoltCells = 0;
-      contVoltNTC = 0;
-    }
-    // response frame actually starts with top of stack, so currentBoard is actually inverted from what it should be
-    // go through each byte in the current board (12 bytes = 6 cells * 2 bytes each)
-    for (i = 0; i < 12; i += 2)
-    {
-      uint16_t rawData = (response_frame[i + 4] << 8) | response_frame[i + 5];
-      float cellVoltage = Complement(rawData, 0.00019073);
-      // cellVoltage=4;
-
-      // if(cellVoltage >= 4.2 || cellVoltage<=2.5){
-      //   ok=false;
-      // }
-
-      if (contVoltCells < 11)
-      {
-        stsVoltCells[idModule][contVoltCells] = cellVoltage;
-        contVoltCells++;
-      }
-    }
-
-    // go through each byte in the current board (12 bytes = 6 GPIO * 2 bytes each)
-    for (i = 0; i < 12; i += 2)
-    {
-      // each board responds with 32 data bytes + 6 header bytes
-
-      // convert the two individual bytes of each cell into a single 16 bit data item (by bit shifting)
-      uint16_t rawData = (response_frame2[i + 4] << 8) | response_frame2[i + 5];
-
-      // do the two's complement of the resultant 16 bit data item, and multiply by 190.73uV to get an actual voltage
-      float GPIOVoltage = Complement(rawData, 0.00019073);
-      // GPIOVoltage=1.08;
-      // Serial.println((String)"GPIO " +(i/2)+" Voltage= " +GPIOVoltage);
-      float temp = voltToTemp(GPIOVoltage);
-      // if(temp >= 60 ){
-      //   ok=false;
-      // }
-      if (contVoltNTC < 9)
-      {
-
-        // Serial.println(contVoltNTC);
-        stsTempCells[idModule][contVoltNTC] = temp;
-        contVoltNTC++;
-      }
-      // print the voltages - it is i/2 because cells start from 1 up to 6
-      // and there are 2 bytes per cell (i value is twice the cell number),
-      // and it's +1 because cell names start with "Cell1"
-    }
-  }
-
-  int tTotal = millis() - t;
-  // Serial.println(tTotal);
-}
-
-
 
 void configBMS()
 {
   bool ok = false;
   Ini_ESP();
-  Serial.println(" START AUTOADRESSING");
+  Serial.println(F("STRT.ADRESS"));
   while (!ok)
   {
     Wake79606();
@@ -1017,7 +978,7 @@ void configBMS()
 
 void setupExclusions(bool cmdFillWithInitialErrors)
 {
-  Serial.println("Configurando listas de exclusión...");
+  //Serial.println("Configurando listas de exclusión...");
   // Excluir sensor de voltaje del módulo 0, sensor 5
  // voltExclusionList.insert({.idModule = 0, .idVolt = 5});
   // Excluir sensor de voltaje del módulo 2, sensor 10
@@ -1025,7 +986,7 @@ void setupExclusions(bool cmdFillWithInitialErrors)
 
   // Excluir sensor de temperatura del módulo 1, sensor 1
   //tempExclusionList.insert({.idModule = 1, .idNTC = 7});
-  Serial.printf("Exclusiones configuradas: %u de voltaje, %u de temperatura.\n", voltExclusionList.size(), tempExclusionList.size());
+  //Serial.printf("Exclusiones configuradas: %u de voltaje, %u de temperatura.\n", voltExclusionList.size(), tempExclusionList.size());
 
 
   //Añade automáticamente a la lista de exclusión las temperaturas y voltajes erróneos al iniciar el programa
@@ -1059,31 +1020,31 @@ void setupExclusions(bool cmdFillWithInitialErrors)
 
 void populateTestData()
 {
-  Serial.println("Poblando arrays con datos de prueba...");
-  // Llenar todo con valores válidos por defecto
-  for (int i = 0; i < MAX_MODULES; ++i)
-    for (int j = 0; j < SENSORS_PER_MODULE_VOLT; ++j)
-      stsVoltCells[i][j] = 3.8f;
-  for (int i = 0; i < MAX_MODULES; ++i)
-    for (int j = 0; j < SENSORS_PER_MODULE_TEMP; ++j)
-      stsTempCells[i][j] = 25.0f;
+  // Serial.println("Poblando arrays con datos de prueba...");
+  // // Llenar todo con valores válidos por defecto
+  // for (int i = 0; i < MAX_MODULES; ++i)
+  //   for (int j = 0; j < SENSORS_PER_MODULE_VOLT; ++j)
+  //     stsVoltCells[i][j] = 3.8f;
+  // for (int i = 0; i < MAX_MODULES; ++i)
+  //   for (int j = 0; j < SENSORS_PER_MODULE_TEMP; ++j)
+  //     stsTempCells[i][j] = 25.0f;
 
-  // Insertar algunos valores que deberían fallar
-  stsVoltCells[0][2] = 2.9f;  // Falla (bajo voltaje)
-  stsVoltCells[1][8] = 4.5f;  // Falla (alto voltaje)
-  stsTempCells[0][0] = 70.0f; // Falla (alta temperatura)
+  // // Insertar algunos valores que deberían fallar
+  // stsVoltCells[0][2] = 2.9f;  // Falla (bajo voltaje)
+  // stsVoltCells[1][8] = 4.5f;  // Falla (alto voltaje)
+  // stsTempCells[0][0] = 70.0f; // Falla (alta temperatura)
 
-  // Insertar un valor fuera de rango en una posición EXCLUIDA
-  // Este NO debería aparecer como una falla.
-  stsVoltCells[0][5] = 1.5f;  // Excluido, no debe fallar
-  stsTempCells[1][1] = 99.0f; // Excluido, no debe fallar
+  // // Insertar un valor fuera de rango en una posición EXCLUIDA
+  // // Este NO debería aparecer como una falla.
+  // stsVoltCells[0][5] = 1.5f;  // Excluido, no debe fallar
+  // stsTempCells[1][1] = 99.0f; // Excluido, no debe fallar
 }
 
 void printFailResults()
 {
   int contFallosTension = 0;
   int contFallosTemp = 0;
-  Serial.println("\n--- Resultados de Fallas de Voltaje (1=FAIL, 0=OK) ---");
+  Serial.println(F("\n-F.Volt (1=FAIL, 0=OK) ---"));
   for (int i = 0; i < MAX_MODULES; ++i)
   {
     Serial.printf(" Modulo %02d: ", i);
@@ -1096,7 +1057,7 @@ void printFailResults()
     Serial.println();
   }
 
-  Serial.println("\n--- Resultados de Fallas de Temperatura (1=FAIL, 0=OK) ---");
+  Serial.println(F("\n--- F.TEMP ---"));
   for (int i = 0; i < MAX_MODULES; ++i)
   {
     Serial.printf(" Modulo %02d: ", i);
@@ -1108,40 +1069,40 @@ void printFailResults()
     }
     Serial.println();
   }
-  Serial.println((String) "Total fallos tension = " + contFallosTension);
-  Serial.println((String) "Total fallos temperatura = " + contFallosTemp);
-  Serial.println((String) "Total fallos CRC = " + numCRCFails);
+  Serial.println((String) "F.Volt = " + contFallosTension);
+  Serial.println((String) "F.TEMP = " + contFallosTemp);
+  Serial.println((String) "F.CRC = " + numCRCFails);
 }
 
 void printExclusionLists()
 {
-  Serial.println("\n--- Contenido de la Lista de Exclusión de Voltaje ---");
+ // Serial.println("\n--- Contenido de la Lista de Exclusión de Voltaje ---");
 
   if (voltExclusionList.empty())
   {
-    Serial.println("-> La lista está vacía.");
+    //Serial.println("-> EMPTY.");
   }
   else
   {
     // Iteramos sobre cada elemento del set usando un bucle for-each
     for (const auto &point : voltExclusionList)
     {
-      Serial.printf("-> Excluido: Módulo %d, Sensor de Voltaje %d\n", point.idModule, point.idVolt);
+      Serial.printf("-> Exc: Mod %d, Temp %d\n %d\n", point.idModule, point.idVolt);
     }
   }
 
-  Serial.println("\n--- Contenido de la Lista de Exclusión de Temperatura ---");
+  //Serial.println("\n--- Contenido de la Lista de Exclusión de Temperatura ---");
 
   if (tempExclusionList.empty())
   {
-    Serial.println("-> La lista está vacía.");
+    //Serial.println("-> La lista está vacía.");
   }
   else
   {
     // Iteramos sobre cada elemento del set
     for (const auto &point : tempExclusionList)
     {
-      Serial.printf("-> Excluido: Módulo %d, Sensor de Temperatura %d\n", point.idModule, point.idNTC);
+      Serial.printf("-> Exc: Mod %d, Temp %d\n", point.idModule, point.idNTC);
     }
   }
 }
