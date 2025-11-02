@@ -11,7 +11,7 @@
 #define LED_COUNT 1
 Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-CAN_BUS CAN(HardwareType::Transciever, MCP_SPEED_500, 2, 10);
+CAN_BUS CAN(HardwareType::Transciever, 500, 2);
 
 //******BMS
 //  --- Configuración de Dimensiones de Arrays ---
@@ -151,13 +151,44 @@ void readVoltages();
 void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]) ;
 
 
+#define TARGET_CHAR_TO_SDC 's'
+#define TARGET_CHAR_TO_LOOP l
+
+
+
+
 void setup()
 {
+  Serial.begin(9600);
+  static int t=millis();
+  pinMode(BMS_OK, OUTPUT);
+  digitalWrite(BMS_OK,false);
+  Serial.println("Esperando letra 's'");
+  char receivedChar = 0; // Initialize to a non-target character
+  while (receivedChar != TARGET_CHAR_TO_SDC) {
+    
+    // ...as long as the received char is not our target.
+    // Check if any data has arrived
+    if (Serial.available() > 0) {
+      // If data is here, read it
+      receivedChar = Serial.read();
+    }
+    // If no data is available, or if it was the wrong character,
+    // the loop just repeats and checks Serial.available() again.
+    t=millis();
+    digitalWrite(BMS_OK,false);
+}
+  while((millis()-t)<=10000)
+  { 
+    Serial.println("ESPERANDO PARA MONITOREO");
+    digitalWrite(BMS_OK,true);
+  }
+
+
 
   bool ok = false;
 
   configBMS();
-  digitalWrite(BMS_OK, false);
   while (CAN.error == 1)
   {
     Serial.println("Error Initializing EScP32Can...");
@@ -321,9 +352,9 @@ bool a; //basurilla
    // Serial.println(adcCurrentValue);
     //  Serial.println((String)"start_charge"+stsStartCharge);
    // Serial.println((String)"FAIL: "+ stsFail);
-    //CAN.printByteArray(stsChargerByte,8);
+    CAN.printByteArray(stsChargerByte,8);
     // Serial.println(t);
-      //CAN.printReceivedIds();
+      CAN.printReceivedIds();
   // CAN.printByteArray(stsChargerByte,8);
   // Serial.println(millis()-tTotal);
 
@@ -417,7 +448,8 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     }
     else if (comando == "r")
     {
-      reset = 1;
+      //reset = 1;
+       ESP.restart();
     }
     else if (comando == "f")
     {
