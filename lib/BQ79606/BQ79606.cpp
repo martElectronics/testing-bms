@@ -339,12 +339,12 @@ bool AutoAddress()
         // WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR);
 
         WriteReg(0, CONFIG, 0x00, 1, FRMWRT_SGL_NR);  //base
-
+        Serial.println((String)"Setting "+ 1);
 		for (nCurrentBoard = 1; nCurrentBoard < (TOTALBOARDS-1); nCurrentBoard++)
     	{
         	WriteReg(nCurrentBoard, CONFIG, 0x02, 1, FRMWRT_SGL_NR); //Stack
 			delay(t_ms);
-			Serial.println((String)"Setting "+ nCurrentBoard);
+			Serial.println((String)"Setting "+ (nCurrentBoard+1));
     	}
 		
         WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR); //top of stack
@@ -363,7 +363,7 @@ bool AutoAddress()
         //dummy read from ECC_TEST (sync DLL)
     	ReadReg(nCurrentBoard, ECC_TEST, response_frame2, 1, 0, FRMWRT_SGL_R);
 		delay(t_ms);
-		Serial.println((String)"Getting "+ nCurrentBoard);
+		Serial.println((String)"Getting "+ (nCurrentBoard+1));
     }
 
     
@@ -389,7 +389,7 @@ bool AutoAddress()
         // RESP_INIT[0] | DEV_ADD[1] | STRT_REG_ADD[2:3] | DATA[4] | CRC[5:6]
 		uint8_t received_address = response_frame2[4];
 
-		Serial.print("Board "); Serial.print(nCurrentBoard); 
+		Serial.print("Board "); Serial.print(nCurrentBoard+1); 
         Serial.print(" (Expected: "); Serial.print(nCurrentBoard); 
         Serial.print(") -> Received: "); Serial.println(received_address);
 
