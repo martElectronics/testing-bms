@@ -47,7 +47,7 @@ void Ini_ESP(){
 	pinMode(START_PIN, INPUT_PULLUP);
 	pinMode(PWM_FANS,OUTPUT);
     //UART inicilization
-	//Serial.setRxBufferSize(1024);
+	//Serial.setRxBufferSize(20000);
    // Serial.begin(115200);
 	//BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
 	

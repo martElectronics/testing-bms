@@ -27,6 +27,10 @@ unsigned int numCOMMFails =0;
 bool holdBMSOK = false; //!!!!!! CUIDADO !!! Si esta variable está a true, se ignoran los fallos del BMS
 byte stsNumAutoadressedDevices = 0;
 
+//Estas variables guardan el estado de fallo aunque la causa ya no esté presente, para ponerlos a '0', pulsar la 'r'
+byte stsFailCommLatch=0,stsFailVoltLatch=0,stsFailAmpLatch=0;
+
+
 // --- Márgenes Parametrizables ---
 const float MIN_VALID_VOLTAGE = 2.8f;
 const float MAX_VALID_VOLTAGE = 4.2f;
@@ -152,30 +156,30 @@ void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]) ;
 
 void setup()
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
   static int t=millis();
   pinMode(BMS_OK, OUTPUT);
-  digitalWrite(BMS_OK,false);
-  Serial.println(F("ESP S"));
-  char receivedChar = 0; // Initialize to a non-target character
-  while (receivedChar != TARGET_CHAR_TO_SDC) {
+  digitalWrite(BMS_OK,true);
+//   Serial.println(F("ESP S"));
+//   char receivedChar = 0; // Initialize to a non-target character
+//   while (receivedChar != TARGET_CHAR_TO_SDC) {
     
-    // ...as long as the received char is not our target.
-    // Check if any data has arrived
-    if (Serial.available() > 0) {
-      // If data is here, read it
-      receivedChar = Serial.read();
-    }
-    // If no data is available, or if it was the wrong character,
-    // the loop just repeats and checks Serial.available() again.
-    t=millis();
-    digitalWrite(BMS_OK,false);
-}
-  while((millis()-t)<=10000)
-  { 
-    Serial.println(F("W.M"));
-    digitalWrite(BMS_OK,true);
-  }
+//     // ...as long as the received char is not our target.
+//     // Check if any data has arrived
+//     if (Serial.available() > 0) {
+//       // If data is here, read it
+//       receivedChar = Serial.read();
+//     }
+//     // If no data is available, or if it was the wrong character,
+//     // the loop just repeats and checks Serial.available() again.
+//     t=millis();
+//     digitalWrite(BMS_OK,false);
+// }
+//   while((millis()-t)<=4000)
+//   { 
+//     Serial.println(F("W.M"));
+//     digitalWrite(BMS_OK,true);
+//   }
   
 
   bool ok = false;
@@ -199,6 +203,9 @@ void setup()
   ledcSetup(pwmChannel, pwmFrequency, pwmResolution);
   ledcAttachPin(pwmPin, pwmChannel);
 
+   Serial.println("Reset reason: ");
+  Serial.println(esp_reset_reason());
+
  // Serial.println(F( "INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura"));
 }
 
@@ -220,7 +227,7 @@ void loop()
   //** CAN RECEIVE */
 
   CAN.receive();
-  CAN.getPacket(idStsCharger, stsChargerByte, 8, false);
+  CAN.getPacket(idStsCharger, stsChargerByte, 8, true);
 
   //** READ GPIO */
   stsStartCharge = !digitalRead(START_PIN);
@@ -242,7 +249,7 @@ void loop()
   stsCorrienteCarga = abs(3007-adcCurrentValue)/3; //sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
 
   //stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
-  stsAMPOK= (stsCorrienteCarga<=16);
+  stsAMPOK= (stsCorrienteCarga<=16); //A 1 está ok, a 0 fail
 
   int resReadVoltages = readVoltages2(stsNumBytesOK);
   if (resReadVoltages == 0)
@@ -258,20 +265,41 @@ void loop()
   {
     contFails++;
     numCOMMFails++;
-    Serial.print(F("C.CRC = "));
+    Serial.print(F("Comm Error"));
     Serial.println(contFails);
-    if (contFails > 5)
-    {
-      //configBMS();
-      contFails = 0;
-    }
+    configBMS();
   }
 bool a; //basurilla
   procesarComandoSerial(corrienteCargaTarget, cmdCharge, cmdResetFail,a );
 
-    //stsAMPOK=true; //****COMENTAR */
+ stsNumBytesOK=true;
   bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
-  stsFail = failCondition;
+  //Se ponen a true las variables de estado de fallo para en caso de que el fallo deje de estar presente, estas sigan activas hasta
+  //que el ususario introduzca 'r'
+  if(!stsVoltagesOK) stsFailVoltLatch=true;
+  if(!stsNumBytesOK) stsFailCommLatch=true;
+  if(!stsAMPOK) stsFailAmpLatch=true;
+
+
+  static unsigned long int timeFail=millis();
+  const unsigned int timeToFail=1000;
+  static long int contFail=0;
+
+  //** Rutina de activación de fallo */
+  // Si se da la condición de fallo durante más de "timeToFail" milisegundos, se abre el SDC
+  if(failCondition)
+  {
+    if((millis()-timeFail)>timeToFail)
+    {
+      stsFail=true;
+    }
+    contFail++;
+    //Serial.println(millis()-timeFail);
+  }
+  else{
+    timeFail=millis();
+    stsFail=false;
+  }
 
   if (!holdBMSOK)
   {
@@ -316,10 +344,16 @@ bool a; //basurilla
     // readVoltages(stsVoltagesOK);
     // CAN.printByteArray(stsChargerByte,8);
     // printVoltages();
-
+    Serial.println(((String)"Fail(Comm,Volt,Amp,FailCond,StsFail)= "+stsFailCommLatch+", "+stsFailVoltLatch+", "+stsFailAmpLatch));
+     Serial.println(((String)"Fail(FailCond,StsF)= "+failCondition+", "+stsFail));
+     Serial.println(contFail);
+     Serial.println(millis());
+     Serial.println();
+   Serial.println(  ESP.getFreeHeap()); //361180 libres
+    Serial.println();
   //   Serial.println((String)"stsamp= "+stsAMPOK+" stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK+" FAIL= "+failCondition);
   //   Serial.println((String)"Itarget= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK+ " corriente actual= "+stsCorrienteCarga);
-  //  t = millis();
+   t = millis();
 
     // bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
     //   Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK +" stsAMPOK= "+stsAMPOK);
@@ -328,9 +362,10 @@ bool a; //basurilla
    // Serial.println(adcCurrentValue);
     //  Serial.println((String)"start_charge"+stsStartCharge);
    // Serial.println((String)"FAIL: "+ stsFail);
-    CAN.printByteArray(stsChargerByte,8);
     // Serial.println(t);
-      CAN.printReceivedIds();
+     CAN.printReceivedIds();
+
+    CAN.printByteArray(stsChargerByte,8);
   // CAN.printByteArray(stsChargerByte,8);
   // Serial.println(millis()-tTotal);
 
@@ -433,6 +468,9 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     else if (comando == "f")
     {
       fail = 0;
+      stsFailAmpLatch=0;
+      stsFailCommLatch=0;
+      stsFailVoltLatch=0;
     }
     else if (comando == "p")
     {
@@ -754,7 +792,7 @@ void controlCharge(float maxVolt, float maxCurrent, bool start)
 
   if (maxVolt > 555)
     maxVolt = 500;
-  CAN.setPacket(idCmdCharger, cmdChargerByte, 8, false);
+  CAN.setPacket(idCmdCharger, cmdChargerByte, 8, true);
 }
 
 /**
@@ -945,6 +983,7 @@ void configBMS()
     CommReset(BAUDRATE);
     delay(200);
     ok = AutoAddress();
+    delay(200);
   }
 
   int nCurrentBoard = 0;
