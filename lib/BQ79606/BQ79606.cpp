@@ -646,7 +646,8 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
         Serial.print(Reciving_Len);
         Serial.print(F(", Read: "));
         Serial.println(bytes_read);
-		
+        Serial.print(F("Board: "));
+        Serial.println(bID+1);
         return -1; // Timeout/Incomplete Read Error
     }
 
