@@ -67,7 +67,7 @@ void Ini_ESP(){
 void Wake79606() {
     // toggle wake signal
     digitalWrite(Wake_pin, LOW);  // assert wake (active low)
-    delayMicroseconds(300);       //250us to 300us
+    delayMicroseconds(320);       //250us to 300us
     digitalWrite(Wake_pin, HIGH); // deassert wake
     delay(12*TOTALBOARDS);        //tSU(WAKE) transition time from shutdown to active - 7ms from wake receive to wake propagate for each device
 }
