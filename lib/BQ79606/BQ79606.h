@@ -18,7 +18,6 @@ extern byte stsNumAutoadressedDevices;
 #define BMS_TX    17         //UART TX pin for BMS (17 original)
 #define PWM_FANS  37        
 #define AMP_PIN  6         
-#define START_PIN  5
 #define PIN_SDC  9
 //WAKE 7
 
