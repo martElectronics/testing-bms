@@ -48,8 +48,9 @@ void Ini_ESP(){
 	pinMode(PWM_FANS,OUTPUT);
     //UART inicilization
 	//Serial.setRxBufferSize(20000);
-   // Serial.begin(115200);
+   Serial.begin(115200);
 	//BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
+   // BMS_UART.begin(BAUDRATE, SERIAL_8N1, MySerialRX, MySerialTX);
 	
 
 	//UART reciving TimeOut timer
@@ -123,6 +124,7 @@ void CommReset(int BAUD) {
 	digitalWrite(BMS_TX,1);     //RX to High
 
    BMS_UART.begin(250000, SERIAL_8N1, MySerialRX, MySerialTX);
+   delay(10);
 
     //tell the base device to set its baudrate to the chosen BAUDRATE, and propagate to the rest of the stack
     //then set the microcontroller to the appropriate baudrate to match
@@ -137,7 +139,7 @@ void CommReset(int BAUD) {
     else if(BAUD == 500000)
     {   
         WriteReg(0, COMM_CTRL, 0x383C, 2, FRMWRT_ALL_NR);   //set COMM_CTRL and DAISY_CHAIN_CTRL registers
-		delayMicroseconds(250);
+		delayMicroseconds(500);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
         BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
@@ -147,7 +149,7 @@ void CommReset(int BAUD) {
         // Base device is already at 250kbps from the CommReset pulse.
     // Broadcast write to ensure stack devices are also at 250kbps.
     WriteReg(0, COMM_CTRL, 0x343C, 2, FRMWRT_ALL_NR);   
-    delayMicroseconds(250);
+    delayMicroseconds(500);
     
     // CRITICAL: Explicitly set the host UART to 250kbps, matching the Base Device's current state.
     BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
@@ -155,7 +157,7 @@ void CommReset(int BAUD) {
     else if(BAUD == 125000)
     {
         WriteReg(0, COMM_CTRL, 0x303C, 2, FRMWRT_ALL_NR);   //set COMM_CTRL and DAISY_CHAIN_CTRL registers
-		delayMicroseconds(250);
+		delayMicroseconds(500);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
         BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
@@ -314,66 +316,66 @@ bool AutoAddress()
     // NOTE: Broadcast write acts individually on the unaddressed device in auto-address mode. [cite: 184, 186]
     for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++)
     {
-        WriteReg(0, DEVADD_USR, nCurrentBoard, 1, FRMWRT_ALL_NR);
+        WriteReg(nCurrentBoard, DEVADD_USR, nCurrentBoard, 1, FRMWRT_ALL_NR);
 		// Minimal delay is needed between these sequential broadcasts
         delayMicroseconds(t_us); 
     }
+
+    //***NEW
+    //Broadcast write CONFIG=0x02 to all devices
+    WriteReg(0, CONFIG, 0x02, 1, FRMWRT_ALL_NR);
+
+    //Single device write CONFIG=0x00 to device 0x00 (base device)
+    WriteReg(0, CONFIG, 0x00, 1, FRMWRT_SGL_NR);
+
+    //Single device write CONFIG=0x00 to device TOTALBOARDS-1 (top of stack)
+    WriteReg(TOTALBOARDS-1, CONFIG, 0x03, 1, FRMWRT_SGL_NR);
+
     
-    // 5. Configure Base, Stack, and Top of Stack Devices [cite: 201]
-    if(TOTALBOARDS == 1)
-    {
-        // 1 Device: Base AND Top (CONFIG 0x01) [cite: 243, 244]
-        WriteReg(0, CONFIG, 0x01, 1, FRMWRT_SGL_NR);
-    }
-    else
-    {
-        // // a. Set ALL devices as Stack (CONFIG 0x02) 
-        // WriteReg(0, CONFIG, 0x02, 1, FRMWRT_ALL_NR); 
-        // delay(t_ms);
+     ReadReg(TOTALBOARDS-1, ECC_TEST, response_frame2, 1, 0, FRMWRT_ALL_R);
+    // // 5. Configure Base, Stack, and Top of Stack Devices [cite: 201]
+    // if(TOTALBOARDS == 1)
+    // {
+    //     // 1 Device: Base AND Top (CONFIG 0x01) [cite: 243, 244]
+    //     WriteReg(0, CONFIG, 0x01, 1, FRMWRT_SGL_NR);
+    // }
+    // else
+    // {
+       
 
-        // // b. Overwrite Device 0 as Base (CONFIG 0x00) [cite: 207]
-        // WriteReg(0, CONFIG, 0x00, 1, FRMWRT_SGL_NR); 
-        // delay(t_ms);
-
-        // // c. Overwrite Top Device as Top of Stack (CONFIG 0x03) [cite: 208]
-        // WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR);
-
-        WriteReg(0, CONFIG, 0x00, 1, FRMWRT_SGL_NR);  //base
-        Serial.println((String)"Setting "+ 1);
-		for (nCurrentBoard = 1; nCurrentBoard < (TOTALBOARDS-1); nCurrentBoard++)
-    	{
-        	WriteReg(nCurrentBoard, CONFIG, 0x02, 1, FRMWRT_SGL_NR); //Stack
-			delay(t_ms);
-			Serial.println((String)"Setting "+ (nCurrentBoard+1));
-    	}
+    //     WriteReg(0, CONFIG, 0x00, 1, FRMWRT_SGL_NR);  //base
+    //     Serial.println((String)"Setting "+ 1);
+	// 	for (nCurrentBoard = 1; nCurrentBoard < (TOTALBOARDS-1); nCurrentBoard++)
+    // 	{
+    //     	WriteReg(nCurrentBoard, CONFIG, 0x02, 1, FRMWRT_SGL_NR); //Stack
+	// 		delay(t_ms);
+	// 		Serial.println((String)"Setting "+ (nCurrentBoard+1));
+    // 	}
 		
-        WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR); //top of stack
-        delay(t_ms);
-    }
-    delay(t_ms);
-
-
-    // // 6. Final dummy read (broadcast read) to ECC_TEST (0x011D) to finish synchronizing DLL [cite: 251, 254]
-	// // This is typically the last addressed device to acknowledge the sync
-    // ReadReg(0, ECC_TEST, response_frame2, 1, 0, FRMWRT_ALL_R); 
+    //     WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR); //top of stack
+    //     delay(t_ms);
+    // }
     // delay(t_ms);
+
+
     
-    for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++)
-    {
-        //dummy read from ECC_TEST (sync DLL)
-    	ReadReg(nCurrentBoard, ECC_TEST, response_frame2, 1, 0, FRMWRT_SGL_R);
-		delay(t_ms);
-		Serial.println((String)"Getting "+ (nCurrentBoard+1));
-    }
+    
+    // for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++)
+    // {
+    //     //dummy read from ECC_TEST (sync DLL)
+    // 	ReadReg(nCurrentBoard, ECC_TEST, response_frame2, 1, 0, FRMWRT_SGL_R);
+	// 	delay(t_ms);
+	// 	Serial.println((String)"Getting "+ (nCurrentBoard+1));
+    // }
 
     
 
-	WriteReg(0, DAISY_CHAIN_CTRL, 0x0D, 1, FRMWRT_SGL_NR);  //base
-	delay(t_ms);
-	WriteReg(1, COMM_CTRL, 0x04, 1, FRMWRT_STK_NR);  //stack
-	delay(t_ms);
-	WriteReg((TOTALBOARDS - 1), DAISY_CHAIN_CTRL, 0x32, 1, FRMWRT_SGL_NR);  //Top
-	delay(t_ms);
+	// WriteReg(0, DAISY_CHAIN_CTRL, 0x0D, 1, FRMWRT_SGL_NR);  //base
+	// delay(t_ms);
+	// WriteReg(1, COMM_CTRL, 0x04, 1, FRMWRT_STK_NR);  //stack
+	// delay(t_ms);
+	// WriteReg((TOTALBOARDS - 1), DAISY_CHAIN_CTRL, 0x32, 1, FRMWRT_SGL_NR);  //Top
+	// delay(t_ms);
 
     // 7. OPTIONAL: Verify address and implicitly check communication by reading DEVADD_USR (0x0104)
     bool ok = true;
