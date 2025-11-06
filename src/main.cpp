@@ -23,13 +23,15 @@ float stsTempCells[12][9];
 
 // Estado de la comunicación
 unsigned int numCRCFails = 0;
-unsigned int numCOMMFails =0;
+unsigned int numCOMMFails = 0;
 bool holdBMSOK = false; //!!!!!! CUIDADO !!! Si esta variable está a true, se ignoran los fallos del BMS
 byte stsNumAutoadressedDevices = 0;
+byte stsNumAutoAdressingAttempts = 0;
+bool stsAutoadressingOK = false;
+bool stsTriedToResetComm = false;
 
-//Estas variables guardan el estado de fallo aunque la causa ya no esté presente, para ponerlos a '0', pulsar la 'r'
-byte stsFailCommLatch=0,stsFailVoltLatch=0,stsFailAmpLatch=0;
-
+// Estas variables guardan el estado de fallo aunque la causa ya no esté presente, para ponerlos a '0', pulsar la 'r'
+byte stsFailCommLatch = 0, stsFailVoltLatch = 0, stsFailAmpLatch = 0;
 
 // --- Márgenes Parametrizables ---
 const float MIN_VALID_VOLTAGE = 2.8f;
@@ -41,9 +43,8 @@ const float MAX_VALID_TEMP = 30.0f;
 bool stsVoltCellsFail[MAX_MODULES][SENSORS_PER_MODULE_VOLT];
 bool stsTempCellsFail[MAX_MODULES][SENSORS_PER_MODULE_TEMP];
 
-
 //****** CARGADOR    */
-unsigned long idStsCharger = 0x18FF50E5;
+unsigned long idStsCharger = 0x18FF50E5; // 419385573
 unsigned long idCmdCharger = 0x1806E5F4;
 unsigned long idPrueba = 0x30;
 byte stsChargerByte[8];
@@ -58,9 +59,7 @@ const int pwmChannel = 0;
 const int pwmPin = PWM_FANS;
 const int pwmFrequency = 5000;
 const int pwmResolution = 8;
-int pwmPorcentaje = 10;
-
-
+int pwmPorcentaje = 50;
 
 /**
 Lee las tensiones de las celdas y los voltajes de los NTC y las guarda en: "stsVoltCells" y "stsTempCells".
@@ -142,48 +141,20 @@ Imprime por el monitor serial la lista de exclusión configurada
 */
 void printExclusionLists();
 
-
-
-
-void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]) ;
-
+void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]);
 
 #define TARGET_CHAR_TO_SDC 's'
 #define TARGET_CHAR_TO_LOOP l
 
-
-
-
 void setup()
 {
   Serial.begin(115200);
-  static int t=millis();
+  static int t = millis();
+
   pinMode(BMS_OK, OUTPUT);
-  digitalWrite(BMS_OK,true);
-//   Serial.println(F("ESP S"));
-//   char receivedChar = 0; // Initialize to a non-target character
-//   while (receivedChar != TARGET_CHAR_TO_SDC) {
-    
-//     // ...as long as the received char is not our target.
-//     // Check if any data has arrived
-//     if (Serial.available() > 0) {
-//       // If data is here, read it
-//       receivedChar = Serial.read();
-//     }
-//     // If no data is available, or if it was the wrong character,
-//     // the loop just repeats and checks Serial.available() again.
-//     t=millis();
-//     digitalWrite(BMS_OK,false);
-// }
-//   while((millis()-t)<=4000)
-//   { 
-//     Serial.println(F("W.M"));
-//     digitalWrite(BMS_OK,true);
-//   }
-  
+  digitalWrite(BMS_OK, false);
 
   bool ok = false;
-
   configBMS();
   while (CAN.error == 1)
   {
@@ -195,25 +166,23 @@ void setup()
   checkFails(okk);
   printFailResults();
 
-  //tempExclusionList.insert({.idModule = 1, .idNTC = 7});
+  // tempExclusionList.insert({.idModule = 1, .idNTC = 7});
   setupExclusions(false);
   // printExclusionLists();
-
 
   ledcSetup(pwmChannel, pwmFrequency, pwmResolution);
   ledcAttachPin(pwmPin, pwmChannel);
 
-   Serial.println("Reset reason: ");
+  Serial.println("Reset reason: ");
   Serial.println(esp_reset_reason());
-
- // Serial.println(F( "INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura"));
+  // Serial.println(F( "INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura"));
 }
 
 void loop()
 {
   unsigned long int tTotal = millis();
   static bool cmdCharge = false;
-  static bool stsNumBytesOK = false;
+  static bool stsCommOK = false;
   static bool stsVoltagesOK = false;
   static bool stsStartCharge = false;
   static bool stsAMPOK = false;
@@ -227,31 +196,32 @@ void loop()
   //** CAN RECEIVE */
 
   CAN.receive();
-  CAN.getPacket(idStsCharger, stsChargerByte, 8, true);
+  CAN.getPacket(idStsCharger, stsChargerByte, 8, false);
 
   //** READ GPIO */
-  stsStartCharge = !digitalRead(START_PIN);
 
-  //AMP
+  // AMP
   int adcCurrentValue = 0;
-  int n=200;
-  for(int i=0;i<n;i++)
+  int n = 200;
+  for (int i = 0; i < n; i++)
   {
     adcCurrentValue += analogRead(AMP_PIN);
     delayMicroseconds(100);
   }
-  adcCurrentValue=adcCurrentValue/n;
+  adcCurrentValue = adcCurrentValue / n;
   //** PROCESS DATA */
 
   stsChargerOK = (stsChargerByte[4] == 0);
 
-  //son 3 numeros de ADC por amperio
-  stsCorrienteCarga = abs(3007-adcCurrentValue)/3; //sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
+  // son 3 numeros de ADC por amperio
+  stsCorrienteCarga = abs(3007 - adcCurrentValue) / 3; // sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
 
-  //stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
-  stsAMPOK= (stsCorrienteCarga<=16); //A 1 está ok, a 0 fail
+  // stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
+  stsAMPOK = (stsCorrienteCarga <= 4); // A 1 está ok, a 0 fail
 
-  int resReadVoltages = readVoltages2(stsNumBytesOK);
+ 
+  
+  int resReadVoltages = readVoltages2(stsCommOK);
   if (resReadVoltages == 0)
   {
     checkFails(stsVoltagesOK);
@@ -266,122 +236,133 @@ void loop()
     contFails++;
     numCOMMFails++;
     Serial.print(F("Comm Error"));
-    Serial.println(contFails);
-    configBMS();
+    //Serial.println(contFails);
+
   }
-bool a; //basurilla
-  procesarComandoSerial(corrienteCargaTarget, cmdCharge, cmdResetFail,a );
-
- stsNumBytesOK=true;
-  bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
-  //Se ponen a true las variables de estado de fallo para en caso de que el fallo deje de estar presente, estas sigan activas hasta
-  //que el ususario introduzca 'r'
-  if(!stsVoltagesOK) stsFailVoltLatch=true;
-  if(!stsNumBytesOK) stsFailCommLatch=true;
-  if(!stsAMPOK) stsFailAmpLatch=true;
 
 
-  static unsigned long int timeFail=millis();
-  const unsigned int timeToFail=1000;
-  static long int contFail=0;
+  bool a; // basurilla
+  procesarComandoSerial(corrienteCargaTarget, cmdCharge, cmdResetFail, a);
+
+  bool failCondition = !(stsVoltagesOK && stsCommOK && stsAMPOK && stsAutoadressingOK);
+  // Se ponen a true las variables de estado de fallo para en caso de que el fallo deje de estar presente, estas sigan activas hasta
+  // que el ususario introduzca 'r'
+  if (!stsVoltagesOK)
+    stsFailVoltLatch = true;
+  if (!stsCommOK)
+    stsFailCommLatch = true;
+  if (!stsAMPOK)
+    stsFailAmpLatch = true;
+
+  static unsigned long int timeFail = millis();
+  const unsigned int timeToFail = 1000;
+  static long int contFail = 0;
 
   //** Rutina de activación de fallo */
-  // Si se da la condición de fallo durante más de "timeToFail" milisegundos, se abre el SDC
-  if(failCondition)
+  /*
+    Si se da la condición de fallo durante más de "timeToFail" milisegundos:
+      Situación 1 - Si el fallo se debe a problema de comunicación entre el esp32 y los esclavos, se vuelve a hacer el AutoAdressing
+        para intentar reestablecer la comunicación, si no se consigue (stsAutoAdressingOK=false), se abre el SDC
+      Situación 2 - Si es por fallo de voltaje, amperímetro o fallo del autoadressing, se abre el SDC inmediatamente
+  */
+
+  if (failCondition)
   {
-    if((millis()-timeFail)>timeToFail)
+    if ((millis() - timeFail) > timeToFail)
     {
-      stsFail=true;
+      if (!(stsVoltagesOK && stsCommOK && stsAMPOK && stsAutoadressingOK)) // Situación 2
+      {
+        stsFail = 1;
+      }
+      else if (!stsCommOK) // Situación 1
+      {
+        if(!stsTriedToResetComm)
+        {
+        configBMS();
+        stsTriedToResetComm=true;
+        }
+      }
     }
-    contFail++;
-    //Serial.println(millis()-timeFail);
+    // Serial.println(millis()-timeFail);
   }
-  else{
-    timeFail=millis();
-    stsFail=false;
+  else
+  {
+    timeFail = millis();
   }
 
-  if (!holdBMSOK)
+  //Si stsFail se pone a true, se abre el SDC. Para ponerla a false hace falta reiniciar el ESP32
+  if (stsFail)
   {
-    if (stsFail)
-    {
-      cmdCharge = 0;
-      corrienteCargaTarget = 0;
-      digitalWrite(BMS_OK, false);
-    }
-    else
-    {
-      digitalWrite(BMS_OK, true);
-      flagShow = 0;
-    }
+    cmdCharge = 0;
+    corrienteCargaTarget = 0;
+    digitalWrite(BMS_OK, false);
+    Serial.println("FAIL");
   }
   else
   {
     digitalWrite(BMS_OK, true);
+    flagShow = 0;
   }
 
-//** CHARGE CONTROL*/
+  //** CHARGE CONTROL*/
 
   controlCharge(456, corrienteCargaTarget, cmdCharge);
-//** PWM CONTROL*/
-  if (pwmPorcentaje>100)   pwmPorcentaje=100;
-  else if(pwmPorcentaje<0 ) pwmPorcentaje=0;
-  float  pwmDutyCycleFloat=(pwmPorcentaje*1000.0)/(2550.0);
-  uint32_t pwmDutyCycle=static_cast<uint32_t>(pwmDutyCycleFloat);
+  //** PWM CONTROL*/
+  if (pwmPorcentaje > 100)
+    pwmPorcentaje = 100;
+  else if (pwmPorcentaje < 0)
+    pwmPorcentaje = 0;
+  float pwmDutyCycleFloat = (pwmPorcentaje * 1000.0) / (2550.0);
+  uint32_t pwmDutyCycle = static_cast<uint32_t>(pwmDutyCycleFloat);
   ledcWrite(pwmChannel, pwmDutyCycle);
 
-//** CAN SEND */
-    CAN.send();
+  //** CAN SEND */
+  CAN.send();
 
-
-//** DEBUG */
-    static int t = millis();
+  //** DEBUG */
+  static int t = millis();
   if ((millis() - t) >= 1000)
   {
     // Serial.println((String)"I= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
-   
+
     // showChargeData();
     // readVoltages(stsVoltagesOK);
     // CAN.printByteArray(stsChargerByte,8);
     // printVoltages();
-    Serial.println(((String)"Fail(Comm,Volt,Amp,FailCond,StsFail)= "+stsFailCommLatch+", "+stsFailVoltLatch+", "+stsFailAmpLatch));
-     Serial.println(((String)"Fail(FailCond,StsF)= "+failCondition+", "+stsFail));
-     Serial.println(contFail);
-     Serial.println(millis());
-     Serial.println();
-   Serial.println(  ESP.getFreeHeap()); //361180 libres
+    Serial.println(((String) "Fail(Comm,Volt,Amp)= " + stsFailCommLatch + ", " + stsFailVoltLatch + ", " + stsFailAmpLatch));
+    Serial.println(((String) "Fail(FailCond,StsF)= " + failCondition + ", " + stsFail));
+    Serial.println(contFail);
+    Serial.println(millis());
     Serial.println();
-  //   Serial.println((String)"stsamp= "+stsAMPOK+" stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK+" FAIL= "+failCondition);
-  //   Serial.println((String)"Itarget= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK+ " corriente actual= "+stsCorrienteCarga);
-   t = millis();
+    Serial.println(ESP.getFreeHeap()); // 361180 libres
+    Serial.println();
+    //   Serial.println((String)"stsamp= "+stsAMPOK+" stsVoltagesOK= "+stsVoltagesOK+" stsCommOK= "+stsCommOK+" FAIL= "+failCondition);
+    //   Serial.println((String)"Itarget= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK+ " corriente actual= "+stsCorrienteCarga);
+    t = millis();
 
-    // bool failCondition = !(stsVoltagesOK && stsNumBytesOK && stsAMPOK);
-    //   Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsNumBytesOK= "+stsNumBytesOK +" stsAMPOK= "+stsAMPOK);
+    // bool failCondition = !(stsVoltagesOK && stsCommOK && stsAMPOK);
+    //   Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsCommOK= "+stsCommOK +" stsAMPOK= "+stsAMPOK);
     //   Serial.println((String)"Current= "+stsCorrienteCarga+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
     //   Serial.println(sensor1.getVoltaje(adcCurrentValue),6);
-   // Serial.println(adcCurrentValue);
+    // Serial.println(adcCurrentValue);
     //  Serial.println((String)"start_charge"+stsStartCharge);
-   // Serial.println((String)"FAIL: "+ stsFail);
+    // Serial.println((String)"FAIL: "+ stsFail);
     // Serial.println(t);
-     CAN.printReceivedIds();
 
-    CAN.printByteArray(stsChargerByte,8);
-  // CAN.printByteArray(stsChargerByte,8);
-  // Serial.println(millis()-tTotal);
+    CAN.printByteArray(stsChargerByte, 8);
+    // CAN.printByteArray(stsChargerByte,8);
+    // Serial.println(millis()-tTotal);
 
-  // Serial.println(stsTempCells[0][1]);
-  // mostrarDatosDetalladosTemperaturas(0);
-  //Serial.println();
+    // Serial.println(stsTempCells[0][1]);
+    // mostrarDatosDetalladosTemperaturas(0);
+    // Serial.println();
   }
-
-
-
 }
 
 void debug()
 {
-  //CAN.printByteArray(stsChargerByte, 8);
-  // Serial.println((String)"I= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail);
+  // CAN.printByteArray(stsChargerByte, 8);
+  //  Serial.println((String)"I= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail);
 }
 
 /**
@@ -435,13 +416,14 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     }
     else if (comando == "i")
     {
-      bool stsNumBytesOK;
+      bool stsCommOK;
       bool stsVoltagesOK;
-      int resReadVoltages = readVoltages2(stsNumBytesOK);
+      int resReadVoltages = readVoltages2(stsCommOK);
       if (resReadVoltages == 0)
       {
         checkFails(stsVoltagesOK);
         mostrarDatosDetallados();
+        showChargeData();
       }
       else if (resReadVoltages == 1)
       {
@@ -462,15 +444,15 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
     }
     else if (comando == "r")
     {
-      //reset = 1;
-       ESP.restart();
+      // reset = 1;
+      ESP.restart();
     }
     else if (comando == "f")
     {
       fail = 0;
-      stsFailAmpLatch=0;
-      stsFailCommLatch=0;
-      stsFailVoltLatch=0;
+      stsFailAmpLatch = 0;
+      stsFailCommLatch = 0;
+      stsFailVoltLatch = 0;
     }
     else if (comando == "p")
     {
@@ -482,8 +464,8 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       // checkFails(oko);
       // setupExclusions();
       // printExclusionLists();
-      holdBMSOK = !holdBMSOK;
-      //Serial.println((String) "hold bms = " + holdBMSOK);
+      // holdBMSOK = !holdBMSOK;
+      // Serial.println((String) "hold bms = " + holdBMSOK);
 
       // --- Comando desconocido ---
     }
@@ -506,25 +488,25 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
 
     else if (comando == "v")
     {
-     // readAndDisplaySingleICRegisters(0);
+      // readAndDisplaySingleICRegisters(0);
       // --- Comando desconocido ---
     }
 
     else if (comando == "w")
     {
-      //readAndPrintSingleRegister(2, 0x0023);
-      // --- Comando desconocido ---
+      // readAndPrintSingleRegister(2, 0x0023);
+      //  --- Comando desconocido ---
     }
-     else if (comando == "e")
+    else if (comando == "e")
     {
-      imprimirDatosCSV(stsVoltCells,stsTempCells);
+      imprimirDatosCSV(stsVoltCells, stsTempCells);
     }
 
     else if (comando.length() > 0)
     {
       Serial.print(F("-> ERR. Com desc:'"));
-      //Serial.print(comando);
-      //Serial.println(F("'"));
+      // Serial.print(comando);
+      // Serial.println(F("'"));
     }
   }
 }
@@ -542,8 +524,8 @@ void mostrarDatosDetalladosTemperaturas(int i)
 void mostrarDatosDetallados()
 {
 
-  //Serial.println(F("\n--- Vista Detallada por Modulo ---")); // F() macro ahorra RAM
-  //Serial.println(F("Modulo | Voltajes (V)                  | Temperaturas (C)"));
+  // Serial.println(F("\n--- Vista Detallada por Modulo ---")); // F() macro ahorra RAM
+  // Serial.println(F("Modulo | Voltajes (V)                  | Temperaturas (C)"));
   Serial.println(F("            1    2    3    4    5    6    7    8    9   10    11        1    2    3    4    5    6    7    8    9  "));
   Serial.println(F("-----------------------------------------------------------------------------------------------------------------"));
 
@@ -582,8 +564,8 @@ void mostrarDatosDetallados()
 
 void mostrarDatosDetalladosOptimizado()
 {
- // Serial.println(F("\n--- Vista Detallada por Modulo ---"));
- // Serial.println(F("Modulo | Voltajes (V)                  | Temperaturas (C)"));
+  // Serial.println(F("\n--- Vista Detallada por Modulo ---"));
+  // Serial.println(F("Modulo | Voltajes (V)                  | Temperaturas (C)"));
   Serial.println(F("            1    2    3    4    5    6    7    8    9   10    11        1    2    3    4    5    6    7    8    9  "));
   Serial.println(F("-----------------------------------------------------------------------------------------------------------------"));
 
@@ -602,15 +584,16 @@ void mostrarDatosDetalladosOptimizado()
     {
       // 1. Get the float value
       float v = stsVoltCells[i][j];
-      
+
       // 2. Handle negative sign if necessary
-      if (v < 0) {
+      if (v < 0)
+      {
         Serial.print("-");
-        v = -v; 
+        v = -v;
       }
 
       // 3. Convert to integer with rounding (e.g., 3.1415 -> 314)
-      long v_int = (long)(v * 100.0 + 0.5); 
+      long v_int = (long)(v * 100.0 + 0.5);
 
       // 4. Print the integer part (e.g., 314 / 100 = 3)
       Serial.print(v_int / 100);
@@ -618,7 +601,8 @@ void mostrarDatosDetalladosOptimizado()
 
       // 5. Print the decimal part (e.g., 314 % 100 = 14)
       long v_dec = v_int % 100;
-      if (v_dec < 10) Serial.print("0"); // Add leading zero for values like 3.01
+      if (v_dec < 10)
+        Serial.print("0"); // Add leading zero for values like 3.01
       Serial.print(v_dec);
       Serial.print(" ");
     }
@@ -632,11 +616,12 @@ void mostrarDatosDetalladosOptimizado()
       float t = stsTempCells[i][j];
 
       // 2. Handle negative sign
-      if (t < 0) {
+      if (t < 0)
+      {
         Serial.print("-");
         t = -t;
       }
-      
+
       // 3. Convert to integer with rounding (e.g., 25.78 -> 258)
       long t_int = (long)(t * 10.0 + 0.5);
 
@@ -792,7 +777,8 @@ void controlCharge(float maxVolt, float maxCurrent, bool start)
 
   if (maxVolt > 555)
     maxVolt = 500;
-  CAN.setPacket(idCmdCharger, cmdChargerByte, 8, true);
+  // Serial.println()
+  CAN.setPacket(idCmdCharger, cmdChargerByte, 8, false);
 }
 
 /**
@@ -816,7 +802,7 @@ void checkFails(bool &ok)
         // NO está excluido: Procedemos a la validación
         float currentVoltage = stsVoltCells[i][j];
 
-        if (currentVoltage < MIN_VALID_VOLTAGE || currentVoltage > MAX_VALID_VOLTAGE)
+        if (currentVoltage <= MIN_VALID_VOLTAGE || currentVoltage >= MAX_VALID_VOLTAGE)
         {
           stsVoltCellsFail[i][j] = true; // El valor está fuera de rango -> FALLA
           ok = false;
@@ -970,20 +956,28 @@ int readVoltages2(bool &ok)
   return returnValue;
 }
 
-
 void configBMS()
 {
   bool ok = false;
   Ini_ESP();
   Serial.println(F("STRT.ADRESS"));
-  while (!ok)
+  stsNumAutoAdressingAttempts = 0;
+  stsAutoadressingOK = true;
+  while (!ok && stsNumAutoAdressingAttempts < NUM_MAX_AUTOADRESSING_ATTEMPTS)
   {
+    Serial.print("Attempt: ");
+    Serial.println(stsNumAutoAdressingAttempts);
     Wake79606();
     delay(200);
     CommReset(BAUDRATE);
     delay(200);
     ok = AutoAddress();
     delay(200);
+    stsNumAutoAdressingAttempts++;
+  }
+  if (stsNumAutoAdressingAttempts >= NUM_MAX_AUTOADRESSING_ATTEMPTS)
+  {
+    stsAutoadressingOK = false;
   }
 
   int nCurrentBoard = 0;
@@ -1017,18 +1011,17 @@ void configBMS()
 
 void setupExclusions(bool cmdFillWithInitialErrors)
 {
-  //Serial.println("Configurando listas de exclusión...");
-  // Excluir sensor de voltaje del módulo 0, sensor 5
- // voltExclusionList.insert({.idModule = 0, .idVolt = 5});
+  // Serial.println("Configurando listas de exclusión...");
+  //  Excluir sensor de voltaje del módulo 0, sensor 5
+  // voltExclusionList.insert({.idModule = 0, .idVolt = 5});
   // Excluir sensor de voltaje del módulo 2, sensor 10
-  //voltExclusionList.insert({.idModule = 2, .idVolt = 10});
+  // voltExclusionList.insert({.idModule = 2, .idVolt = 10});
 
   // Excluir sensor de temperatura del módulo 1, sensor 1
-  //tempExclusionList.insert({.idModule = 1, .idNTC = 7});
-  //Serial.printf("Exclusiones configuradas: %u de voltaje, %u de temperatura.\n", voltExclusionList.size(), tempExclusionList.size());
+  // tempExclusionList.insert({.idModule = 1, .idNTC = 7});
+  // Serial.printf("Exclusiones configuradas: %u de voltaje, %u de temperatura.\n", voltExclusionList.size(), tempExclusionList.size());
 
-
-  //Añade automáticamente a la lista de exclusión las temperaturas y voltajes erróneos al iniciar el programa
+  // Añade automáticamente a la lista de exclusión las temperaturas y voltajes erróneos al iniciar el programa
 
   if (true)
   {
@@ -1115,11 +1108,11 @@ void printFailResults()
 
 void printExclusionLists()
 {
- // Serial.println("\n--- Contenido de la Lista de Exclusión de Voltaje ---");
+  // Serial.println("\n--- Contenido de la Lista de Exclusión de Voltaje ---");
 
   if (voltExclusionList.empty())
   {
-    //Serial.println("-> EMPTY.");
+    // Serial.println("-> EMPTY.");
   }
   else
   {
@@ -1130,11 +1123,11 @@ void printExclusionLists()
     }
   }
 
-  //Serial.println("\n--- Contenido de la Lista de Exclusión de Temperatura ---");
+  // Serial.println("\n--- Contenido de la Lista de Exclusión de Temperatura ---");
 
   if (tempExclusionList.empty())
   {
-    //Serial.println("-> La lista está vacía.");
+    // Serial.println("-> La lista está vacía.");
   }
   else
   {
@@ -1146,7 +1139,6 @@ void printExclusionLists()
   }
 }
 
-
 /**
  * @brief Imprime los datos de voltaje y temperatura en formato CSV al monitor serie.
  * * Utiliza punto y coma (;) como delimitador de columnas y formatea los nombres
@@ -1155,51 +1147,58 @@ void printExclusionLists()
  * @param stsVoltCells Array de 12x11 con los datos de voltaje de las celdas.
  * @param stsTempCells Array de 12x9 con los datos de temperatura de las celdas.
  */
-void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]) {
-  
+void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9])
+{
+
   // --- 1. Imprimir la fila de encabezado ---
-  
+
   Serial.print("Modulo");
-  
+
   // Imprimir encabezados de Voltaje (V1 a V11)
-  for (int j = 0; j < 11; j++) {
+  for (int j = 0; j < 11; j++)
+  {
     Serial.print(";V");
     Serial.print(j + 1);
   }
-  
+
   // Imprimir encabezados de Temperatura (T1 a T9)
-  for (int j = 0; j < 9; j++) {
+  for (int j = 0; j < 9; j++)
+  {
     Serial.print(";T");
     Serial.print(j + 1);
   }
-  
+
   // Terminar la línea del encabezado
   Serial.println();
 
   // --- 2. Imprimir las filas de datos (una por módulo) ---
-  
-  for (int i = 0; i < 12; i++) { // Iterar sobre cada módulo (filas 0-11)
-    
+
+  for (int i = 0; i < 12; i++)
+  { // Iterar sobre cada módulo (filas 0-11)
+
     // Imprimir el nombre del módulo (M01, M02, ..., M12)
     Serial.print("M");
     int moduloNum = i + 1;
-    if (moduloNum < 10) {
+    if (moduloNum < 10)
+    {
       Serial.print("0"); // Añadir cero inicial para M01-M09
     }
     Serial.print(moduloNum);
-    
+
     // Imprimir los 11 datos de voltaje para este módulo
-    for (int j = 0; j < 11; j++) {
+    for (int j = 0; j < 11; j++)
+    {
       Serial.print(";");
       Serial.print(stsVoltCells[i][j]);
     }
-    
+
     // Imprimir los 9 datos de temperatura para este módulo
-    for (int j = 0; j < 9; j++) {
+    for (int j = 0; j < 9; j++)
+    {
       Serial.print(";");
       Serial.print(stsTempCells[i][j]);
     }
-    
+
     // Terminar la línea de datos para este módulo
     Serial.println();
   }

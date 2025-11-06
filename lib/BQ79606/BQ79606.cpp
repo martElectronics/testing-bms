@@ -44,7 +44,6 @@ void Ini_ESP(){
 	//Fault pin Inicialization
 	pinMode(Fault_pin, INPUT);
 	pinMode(AMP_PIN, INPUT);
-	pinMode(START_PIN, INPUT_PULLUP);
 	pinMode(PWM_FANS,OUTPUT);
     //UART inicilization
 	//Serial.setRxBufferSize(20000);
@@ -125,13 +124,14 @@ void CommReset(int BAUD) {
 
    BMS_UART.begin(250000, SERIAL_8N1, MySerialRX, MySerialTX);
    delay(10);
+   const static int delayMicro=10000;
 
     //tell the base device to set its baudrate to the chosen BAUDRATE, and propagate to the rest of the stack
     //then set the microcontroller to the appropriate baudrate to match
     if(BAUD == 1000000)
     {
         WriteReg(0, COMM_CTRL, 0x3C3C, 2, FRMWRT_ALL_NR);   //set COMM_CTRL and DAISY_CHAIN_CTRL registers
-		delayMicroseconds(500);
+		delayMicroseconds(delayMicro);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
         BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
@@ -139,7 +139,7 @@ void CommReset(int BAUD) {
     else if(BAUD == 500000)
     {   
         WriteReg(0, COMM_CTRL, 0x383C, 2, FRMWRT_ALL_NR);   //set COMM_CTRL and DAISY_CHAIN_CTRL registers
-		delayMicroseconds(500);
+		delayMicroseconds(delayMicro);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
         BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
@@ -149,7 +149,7 @@ void CommReset(int BAUD) {
         // Base device is already at 250kbps from the CommReset pulse.
     // Broadcast write to ensure stack devices are also at 250kbps.
     WriteReg(0, COMM_CTRL, 0x343C, 2, FRMWRT_ALL_NR);   
-    delayMicroseconds(500);
+    delayMicroseconds(delayMicro);
     
     // CRITICAL: Explicitly set the host UART to 250kbps, matching the Base Device's current state.
     BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
@@ -157,7 +157,7 @@ void CommReset(int BAUD) {
     else if(BAUD == 125000)
     {
         WriteReg(0, COMM_CTRL, 0x303C, 2, FRMWRT_ALL_NR);   //set COMM_CTRL and DAISY_CHAIN_CTRL registers
-		delayMicroseconds(500);
+		delayMicroseconds(delayMicro);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
 
         BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
@@ -166,7 +166,7 @@ void CommReset(int BAUD) {
     {
         printf("ERROR: INVALID BAUDRATE CHOSEN IN BQ79606.h FILE. Choosing default 1M baudrate:\n\n");
         WriteReg(0, COMM_CTRL, 0x3C3C, 2, FRMWRT_ALL_NR);
-		delayMicroseconds(250);
+		delayMicroseconds(delayMicro);
         BMS_UART.begin(1000000, SERIAL_8N1, MySerialRX, MySerialTX);
     }
 
