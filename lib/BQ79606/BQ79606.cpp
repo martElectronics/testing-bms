@@ -159,7 +159,6 @@ void CommReset(int BAUD) {
         WriteReg(0, COMM_CTRL, 0x303C, 2, FRMWRT_ALL_NR);   //set COMM_CTRL and DAISY_CHAIN_CTRL registers
 		delayMicroseconds(delayMicro);
         //ALL 606 DEVICES ARE NOW AT 1M BAUDRATE
-
         BMS_UART.begin(BAUD, SERIAL_8N1, MySerialRX, MySerialTX);
     }
     else

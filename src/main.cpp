@@ -146,6 +146,8 @@ void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]);
 #define TARGET_CHAR_TO_SDC 's'
 #define TARGET_CHAR_TO_LOOP l
 
+
+
 void setup()
 {
   Serial.begin(115200);
@@ -175,6 +177,28 @@ void setup()
 
   Serial.println("Reset reason: ");
   Serial.println(esp_reset_reason());
+
+  Serial.println("---==[ RUNTIME MEMORY REPORT ]==---");
+
+  // This is the total free memory you have for ALL dynamic 
+  // allocations (new, malloc, other tasks, etc.)
+  Serial.printf("Free Heap (at setup): %u bytes\n", ESP.getFreeHeap());
+
+  // This is the "low water mark" for the heap. It tells you
+  // the smallest amount of free heap you've had so far.
+  Serial.printf("Min Free Heap (at setup): %u bytes\n", ESP.getMinFreeHeap());
+
+  // This is your check. It shows the minimum free space
+  // your 16,000-byte loop stack has had so far.
+  UBaseType_t stackHighWater = uxTaskGetStackHighWaterMark(NULL);
+  Serial.printf("Loop Stack HWM (minimum free): %u bytes\n", stackHighWater);
+
+  // You can calculate the "used" part from this
+  Serial.printf("Loop Stack Used (approx): %u bytes\n", 
+                 CONFIG_ARDUINO_LOOP_STACK_SIZE - stackHighWater);
+  
+  Serial.println("---=============================---");
+
   // Serial.println(F( "INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura"));
 }
 
@@ -296,7 +320,7 @@ void loop()
     cmdCharge = 0;
     corrienteCargaTarget = 0;
     digitalWrite(BMS_OK, false);
-    Serial.println("FAIL");
+    
   }
   else
   {
@@ -329,40 +353,40 @@ void loop()
     // readVoltages(stsVoltagesOK);
     // CAN.printByteArray(stsChargerByte,8);
     // printVoltages();
-    Serial.println(((String) "Fail(Comm,Volt,Amp)= " + stsFailCommLatch + ", " + stsFailVoltLatch + ", " + stsFailAmpLatch));
-    Serial.println(((String) "Fail(FailCond,StsF)= " + failCondition + ", " + stsFail));
+    // ✅ GOOD (direct printing, no temporary objects)
+Serial.print(F("Fail(Comm,Volt,Amp)= "));
+Serial.print(stsFailCommLatch);
+Serial.print(F(", "));
+Serial.print(stsFailVoltLatch);
+Serial.print(F(", "));
+Serial.println(stsFailAmpLatch);
+
+Serial.print(F("Fail(FailCond,StsF)"));
+Serial.print(failCondition);
+Serial.print(F(", "));
+Serial.println(stsFail);
+
     Serial.println(contFail);
     Serial.println(millis());
     Serial.println();
     Serial.println(ESP.getFreeHeap()); // 361180 libres
     Serial.println();
-    //   Serial.println((String)"stsamp= "+stsAMPOK+" stsVoltagesOK= "+stsVoltagesOK+" stsCommOK= "+stsCommOK+" FAIL= "+failCondition);
-    //   Serial.println((String)"Itarget= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK+ " corriente actual= "+stsCorrienteCarga);
+  
     t = millis();
 
-    // bool failCondition = !(stsVoltagesOK && stsCommOK && stsAMPOK);
-    //   Serial.println((String)"stsVoltagesOK= "+stsVoltagesOK+" stsCommOK= "+stsCommOK +" stsAMPOK= "+stsAMPOK);
-    //   Serial.println((String)"Current= "+stsCorrienteCarga+" adc voltage = "+sensor1.getVoltaje(adcCurrentValue));
-    //   Serial.println(sensor1.getVoltaje(adcCurrentValue),6);
-    // Serial.println(adcCurrentValue);
-    //  Serial.println((String)"start_charge"+stsStartCharge);
-    // Serial.println((String)"FAIL: "+ stsFail);
-    // Serial.println(t);
-
     CAN.printByteArray(stsChargerByte, 8);
-    // CAN.printByteArray(stsChargerByte,8);
-    // Serial.println(millis()-tTotal);
-
-    // Serial.println(stsTempCells[0][1]);
-    // mostrarDatosDetalladosTemperaturas(0);
-    // Serial.println();
+     UBaseType_t stackHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
+    Serial.printf("Free stack: %d bytes\n", stackHighWaterMark);
+    
+    if (stackHighWaterMark < 500) {
+        Serial.println("WARNING: Stack running low!");
+    }
   }
 }
 
 void debug()
 {
-  // CAN.printByteArray(stsChargerByte, 8);
-  //  Serial.println((String)"I= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail);
+
 }
 
 /**
@@ -721,7 +745,8 @@ void showChargeData()
   Serial.print(tempMedia, 2);
   Serial.println("C");
 
-  Serial.println((String) "Charge Current :" + stsCorrienteCarga);
+  Serial.print(F("Charge Current :"));
+  Serial.println(stsCorrienteCarga);
 }
 
 float voltToTemp(float GPIOVoltage)
@@ -935,7 +960,6 @@ int readVoltages2(bool &ok)
           // do the two's complement of the resultant 16 bit data item, and multiply by 190.73uV to get an actual voltage
           float GPIOVoltage = Complement(rawData, 0.00019073);
           // GPIOVoltage=1.08;
-          // Serial.println((String)"GPIO " +(i/2)+" Voltage= " +GPIOVoltage);
           float temp = voltToTemp(GPIOVoltage);
           // if(temp >= 60 ){
           //   ok=false;
@@ -1101,9 +1125,15 @@ void printFailResults()
     }
     Serial.println();
   }
-  Serial.println((String) "F.Volt = " + contFallosTension);
-  Serial.println((String) "F.TEMP = " + contFallosTemp);
-  Serial.println((String) "F.CRC = " + numCRCFails);
+
+  Serial.print(F("F.Volt ="));
+  Serial.println(contFallosTension);
+
+  Serial.print(F("F.TEMP = "));
+  Serial.println(contFallosTemp);
+
+  Serial.print(F("F.CRC = "));
+  Serial.println(numCRCFails);
 }
 
 void printExclusionLists()
