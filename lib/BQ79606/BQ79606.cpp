@@ -398,6 +398,7 @@ bool AutoAddress()
 		if(received_address != nCurrentBoard) {
             ok = false; 
         }
+        yield();
 		delay(10); // Serial print delay
 	}
 	Serial.println("--------------------------");
@@ -516,11 +517,50 @@ int WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteTyp
 	*pBuf++ = wCRC & 0x00FF;
 	*pBuf++ = (wCRC & 0xFF00) >> 8;
 	bPktLen += 2;
+
+
+    // ===================================================================
+    // === NEW NON-BLOCKING WRITE LOGIC ===
+    // ===================================================================
+    
+    // 20ms is more than enough time to send a frame at 250k baud
+    const uint32_t WRITE_TIMEOUT_MS = 20; 
+    uint32_t startTime = millis();
+    int bytes_written = 0;
+    
+    while (bytes_written < bPktLen) 
+    {
+        // Check for timeout
+        if (millis() - startTime > WRITE_TIMEOUT_MS) {
+             Serial.println(F("!!! UART WRITE TIMEOUT !!!"));
+             return -1; // Indicate a write failure
+        }
+        
+        // Check if there is space in the hardware TX buffer
+        // (128 bytes is the default ESP32 FIFO size)
+        if (BMS_UART.availableForWrite() > 0) 
+        {
+            // Write one byte
+            BMS_UART.write(pFrame[bytes_written]);
+            bytes_written++;
+        } 
+        else 
+        {
+            // TX buffer is full, yield to feed watchdog and wait
+            yield();
+        }
+    }
+
+    // Original blocking call: BMS_UART.write(pFrame, bPktLen);
+	return bPktLen; // Return original packet length on success
+
+
+
 	//THIS SEEMS to occasionally drop bytes from the frame. Sometimes is not sending the last frame of the CRC.
 	//(Seems to be caused by stack overflow, so take precautions to reduce stack usage in function calls)
-	BMS_UART.write(pFrame, bPktLen);
+	// BMS_UART.write(pFrame, bPktLen);
 
-	return bPktLen;
+	// return bPktLen;
 }
 
 
@@ -593,7 +633,7 @@ int WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteTyp
 int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOut, byte bWriteType) {
     int Reciving_Len = 0;
     int bytes_read = 0;
-    const uint32_t DEFAULT_TIMEOUT_MS = 50; // Set a default timeout
+    const uint32_t DEFAULT_TIMEOUT_MS = 10; // Set a default timeout
 
     // --- 1. Calculate expected response length ---
     if(bWriteType == FRMWRT_SGL_R){
@@ -637,24 +677,76 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
     // Clear the destination data buffer
     memset(pData, 0, Reciving_Len); 
 
-    // --- 4. Read the expected number of bytes ---
-    // The readBytes function internally handles waiting up to the timeout.
-    bytes_read = BMS_UART.readBytes(pData, Reciving_Len);
-    static int cont=0;
+    // ===================================================================
+    // === NEW NON-BLOCKING READ LOGIC ===
+    // ===================================================================
+
+    // --- 4. Read the response non-blockingly ---
+    uint32_t startTime = millis();
+    // Use the function's timeout param, or fall back to our default
+    uint32_t timeout = (dwTimeOut == 0) ? DEFAULT_TIMEOUT_MS : dwTimeOut;
+
+    // Manually poll for bytes with a watchdog-safe loop
+    while (bytes_read < Reciving_Len)
+    {
+        // Check if we've run out of time
+        if (millis() - startTime > timeout) {
+            break; // Exit the loop on timeout
+        }
+
+        // Check if bytes are available to read
+        if (BMS_UART.available() > 0)
+        {
+            pData[bytes_read] = BMS_UART.read();
+            bytes_read++;
+        }
+        else
+        {
+            // If no bytes, yield to feed watchdog and let other tasks run
+            yield(); 
+        }
+    }
+    
+    // --- 5. Check for timeout/incomplete read ---
     if (bytes_read != Reciving_Len) {
+        static int cont=0; // Keep this from your original code
 		
-        // Timeout occurred or communication interrupted if less than expected bytes were read
+        // // Now we will see these error messages when noise hits
         Serial.print(F("Timeout/Incomplete Read. Expected: "));
-        Serial.print(Reciving_Len);
-        Serial.print(F(", Read: "));
-        Serial.println(bytes_read);
-        Serial.print(F("Board: "));
-        Serial.println(bID+1);
+        // Serial.print(Reciving_Len);
+        // Serial.print(F(", Read: "));
+        // Serial.println(bytes_read);
+        // Serial.print(F("Board: "));
+        // Serial.println(bID+1);
         return -1; // Timeout/Incomplete Read Error
     }
 
     // Success: return number of bytes read
     return bytes_read;
+
+
+
+
+
+
+    // // --- 4. Read the expected number of bytes ---
+    // // The readBytes function internally handles waiting up to the timeout.
+    // bytes_read = BMS_UART.readBytes(pData, Reciving_Len);
+    // static int cont=0;
+    // if (bytes_read != Reciving_Len) {
+		
+    //     // Timeout occurred or communication interrupted if less than expected bytes were read
+    //     Serial.print(F("Timeout/Incomplete Read. Expected: "));
+    //     Serial.print(Reciving_Len);
+    //     Serial.print(F(", Read: "));
+    //     Serial.println(bytes_read);
+    //     Serial.print(F("Board: "));
+    //     Serial.println(bID+1);
+    //     return -1; // Timeout/Incomplete Read Error
+    // }
+
+    // // Success: return number of bytes read
+    // return bytes_read;
 }
 
 

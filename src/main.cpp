@@ -214,7 +214,7 @@ void loop()
   stsChargerOK = (stsChargerByte[4] == 0);
 
   // son 3 numeros de ADC por amperio
-  stsCorrienteCarga = abs(3007 - adcCurrentValue) / 3; // sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
+  stsCorrienteCarga = abs(2947 - adcCurrentValue) / 3; // sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
 
   // stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
   stsAMPOK = (stsCorrienteCarga <= 4); // A 1 está ok, a 0 fail
@@ -270,7 +270,7 @@ void loop()
   {
     if ((millis() - timeFail) > timeToFail)
     {
-      if (!(stsVoltagesOK && stsCommOK && stsAMPOK && stsAutoadressingOK)) // Situación 2
+      if (!(stsVoltagesOK && stsAMPOK && stsAutoadressingOK)) // Situación 2
       {
         stsFail = 1;
       }
@@ -279,7 +279,7 @@ void loop()
         if(!stsTriedToResetComm)
         {
         configBMS();
-        stsTriedToResetComm=true;
+        //stsTriedToResetComm=true;
         }
       }
     }
@@ -950,6 +950,7 @@ int readVoltages2(bool &ok)
         }
       }
     }
+    yield();
     delay(1);
   }
   int tTotal = millis() - t;
@@ -965,7 +966,7 @@ void configBMS()
   stsAutoadressingOK = true;
   while (!ok && stsNumAutoAdressingAttempts < NUM_MAX_AUTOADRESSING_ATTEMPTS)
   {
-    Serial.print("Attempt: ");
+    Serial.print("**************Attempt: ");
     Serial.println(stsNumAutoAdressingAttempts);
     Wake79606();
     delay(200);
