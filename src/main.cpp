@@ -4,6 +4,7 @@
 #include <MART_CAN.h>
 #include <global.h>
 #include "SensorCorriente.cpp"
+#include <esp_task_wdt.h>
 
 // LED
 #define LED_PIN 48
@@ -198,6 +199,7 @@ void setup()
                  CONFIG_ARDUINO_LOOP_STACK_SIZE - stackHighWater);
   
   Serial.println("---=============================---");
+
 
   // Serial.println(F( "INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura"));
 }
@@ -787,7 +789,7 @@ void controlCharge(float maxVolt, float maxCurrent, bool start)
     curr_high_byte = (scaled_current >> 8) & 0xFF;
     curr_low_byte = scaled_current & 0xFF;
 
-    byte cmdChargerByte[8];
+  
   }
 
   for (int i = 0; i < 8; i++)
