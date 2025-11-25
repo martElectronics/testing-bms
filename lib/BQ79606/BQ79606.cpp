@@ -643,12 +643,12 @@ int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOu
     if (bytes_read != Reciving_Len) {
 		
         // Timeout occurred or communication interrupted if less than expected bytes were read
-        Serial.print(F("Timeout/Incomplete Read. Expected: "));
-        Serial.print(Reciving_Len);
-        Serial.print(F(", Read: "));
-        Serial.println(bytes_read);
-        Serial.print(F("Board: "));
-        Serial.println(bID+1);
+        // Serial.print(F("Timeout/Incomplete Read. Expected: "));
+        // Serial.print(Reciving_Len);
+        // Serial.print(F(", Read: "));
+        // Serial.println(bytes_read);
+        // Serial.print(F("Board: "));
+        // Serial.println(bID+1);
         return -1; // Timeout/Incomplete Read Error
     }
 

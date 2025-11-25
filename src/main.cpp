@@ -240,10 +240,10 @@ void loop()
   stsChargerOK = (stsChargerByte[4] == 0);
 
   // son 3 numeros de ADC por amperio
-  stsCorrienteCarga = abs(3007 - adcCurrentValue) / 3; // sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
+  stsCorrienteCarga = abs(2943 - adcCurrentValue) / 3; // sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
 
   // stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
-  stsAMPOK = (stsCorrienteCarga <= 4); // A 1 está ok, a 0 fail
+  stsAMPOK = (stsCorrienteCarga <= 10); // A 1 está ok, a 0 fail
 
  
   
@@ -261,7 +261,7 @@ void loop()
   {
     contFails++;
     numCOMMFails++;
-    Serial.print(F("Comm Error"));
+    Serial.println(F("Comm Error"));
     //Serial.println(contFails);
 
   }
@@ -270,6 +270,7 @@ void loop()
   bool a; // basurilla
   procesarComandoSerial(corrienteCargaTarget, cmdCharge, cmdResetFail, a);
 
+  //Para que no haya fallo, tienen que estar todas a 1
   bool failCondition = !(stsVoltagesOK && stsCommOK && stsAMPOK && stsAutoadressingOK);
   // Se ponen a true las variables de estado de fallo para en caso de que el fallo deje de estar presente, estas sigan activas hasta
   // que el ususario introduzca 'r'
@@ -296,7 +297,7 @@ void loop()
   {
     if ((millis() - timeFail) > timeToFail)
     {
-      if (!(stsVoltagesOK && stsCommOK && stsAMPOK && stsAutoadressingOK)) // Situación 2
+      if (!(stsVoltagesOK && stsAMPOK && stsAutoadressingOK)) // Situación 2
       {
         stsFail = 1;
       }
@@ -356,17 +357,26 @@ void loop()
     // CAN.printByteArray(stsChargerByte,8);
     // printVoltages();
     // ✅ GOOD (direct printing, no temporary objects)
-Serial.print(F("Fail(Comm,Volt,Amp)= "));
+Serial.print(F("Fail(Comm,Volt,Amp,AutoAdressing)= "));
 Serial.print(stsFailCommLatch);
 Serial.print(F(", "));
 Serial.print(stsFailVoltLatch);
 Serial.print(F(", "));
-Serial.println(stsFailAmpLatch);
+Serial.print(stsFailAmpLatch);
+Serial.print(F(", "));
+Serial.println(!stsAutoadressingOK);
 
 Serial.print(F("Fail(FailCond,StsF)"));
 Serial.print(failCondition);
 Serial.print(F(", "));
 Serial.println(stsFail);
+
+Serial.print(F("Amp(Current,VoltADC)= "));
+Serial.print(stsCorrienteCarga);
+Serial.print(F(", "));
+Serial.println(adcCurrentValue);
+
+
 
     Serial.println(contFail);
     Serial.println(millis());
@@ -398,33 +408,48 @@ void debug()
  */
 void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset, bool &fail)
 {
-  // Solo procesa si hay datos disponibles en el buffer del puerto serie
+  // Solo procesa si hay datos disponibles
   if (Serial.available() > 0)
   {
-    // Lee la cadena completa hasta que encuentra un salto de línea
-    String comando = Serial.readStringUntil('\n');
-    comando.trim(); // Elimina espacios en blanco o carácteres invisibles al inicio/final
+    // 1. SAFE BUFFER: Define a rigid limit for the command length. 
+    // 32 bytes is plenty for "c,123.45,1" or single chars.
+    const size_t MAX_CMD_SIZE = 32;
+    char cmdBuffer[MAX_CMD_SIZE + 1]; // +1 for null terminator
 
-    // --- Comando 'c': configurar valores ---
-    // Formato esperado: "c,valor_float,valor_bool" (ej: "c,123.45,1")
-    if (comando.startsWith("c,"))
+    // 2. SAFE READ: Read bytes until newline OR until buffer is full.
+    // This prevents the "infinite read" crash caused by noise.
+    size_t readLen = Serial.readBytesUntil('\n', cmdBuffer, MAX_CMD_SIZE);
+    
+
+    // 3. Null-terminate the string so C functions know where it ends
+    cmdBuffer[readLen] = '\0';
+    Serial.println(cmdBuffer);
+    // Cleanup: Remove carriage return '\r' if present (common from Serial Monitors)
+    if (readLen > 0 && cmdBuffer[readLen - 1] == '\r')
     {
-      // Busca la posición de la primera y segunda coma
-      int primeraComa = comando.indexOf(',');
-      int segundaComa = comando.indexOf(',', primeraComa + 1);
+      cmdBuffer[readLen - 1] = '\0';
+      readLen--;
+    }
 
-      // Si encontramos ambas comas, el formato es potencialmente correcto
-      if (segundaComa > primeraComa)
+    // If buffer is empty (just a newline received), exit
+    if (readLen == 0) return;
+
+    // --- PARSING ---
+
+    // Check for command 'c' (starts with "c,")
+    if (cmdBuffer[0] == 'c' && cmdBuffer[1] == ',')
+    {
+      float tempFloat = 0.0;
+      int tempInt = 0;
+      
+      // Use sscanf to safely parse the numbers
+      // Returns the number of items successfully matched
+      int parsed = sscanf(cmdBuffer, "c,%f,%d", &tempFloat, &tempInt);
+
+      if (parsed == 2)
       {
-        // Extrae la subcadena para el float
-        String floatStr = comando.substring(primeraComa + 1, segundaComa);
-
-        // Extrae la subcadena para el bool (0 o 1)
-        String boolStr = comando.substring(segundaComa + 1);
-
-        // Convierte las cadenas a sus tipos de dato y actualiza las variables por referencia
-        valorFloatRef = floatStr.toFloat();
-        valorBoolRef = (boolStr.toInt() == 1); // Convierte a bool (1=true, 0=false)
+        valorFloatRef = tempFloat;
+        valorBoolRef = (tempInt == 1);
 
         Serial.print(F("-> OK: Coma 'c' rec: "));
         Serial.print(F("float = "));
@@ -434,105 +459,93 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       }
       else
       {
-        // Error si el formato no es el esperado
-        Serial.println(F("-> ERROR: 'c'"));
+        Serial.println(F("-> ERROR: Format 'c,float,bool'"));
+      }
+    }
+    // Handle Single Character Commands
+    else if (readLen == 1)
+    {
+      char cmd = cmdBuffer[0];
+
+      switch (cmd)
+      {
+      case 'i':
+      {
+        bool stsCommOK_loc;
+        bool stsVoltagesOK_loc;
+        // Ensure readVoltages2 uses local buffers (remove 'static' from readVoltages2 vars first!)
+        int resReadVoltages = readVoltages2(stsCommOK_loc);
+        
+        if (resReadVoltages == 0)
+        {
+          checkFails(stsVoltagesOK_loc);
+          mostrarDatosDetallados();
+          showChargeData();
+        }
+        else if (resReadVoltages == 1)
+        {
+          numCRCFails++;
+          Serial.println(F("CRC error"));
+        }
+        else
+        {
+          Serial.println(F("Read error"));
+        }
+        break;
       }
 
-      // --- Comando 'i': ejecutar función I ---
-    }
-    else if (comando == "i")
-    {
-      bool stsCommOK;
-      bool stsVoltagesOK;
-      int resReadVoltages = readVoltages2(stsCommOK);
-      if (resReadVoltages == 0)
-      {
-        checkFails(stsVoltagesOK);
-        mostrarDatosDetallados();
+      case 'l':
+        printFailResults();
+        break;
+
+      case 'r':
+        Serial.println(F("Restarting..."));
+        delay(100);
+        ESP.restart();
+        break;
+
+      case 'f':
+        fail = 0;
+        stsFailAmpLatch = 0;
+        stsFailCommLatch = 0;
+        stsFailVoltLatch = 0;
+        Serial.println(F("Fails Reset"));
+        break;
+
+      case 'd':
         showChargeData();
+        break;
+
+      case 'a':
+        configBMS();
+        break;
+
+      case 'b':
+        CommSleepToWake();
+        break;
+
+      case 'e':
+        imprimirDatosCSV(stsVoltCells, stsTempCells);
+        break;
+      
+      // Debug/Unused commands kept for compatibility
+      case 'p':
+      case 's':
+      case 'v':
+      case 'w':
+        break;
+
+      default:
+        // It's a single char, but not one we know. Likely noise. 
+        // Print nothing to avoid flooding logs.
+        break;
       }
-      else if (resReadVoltages == 1)
-      {
-        numCRCFails++;
-        Serial.println(F("CRC error"));
-      }
-      else
-      {
-        Serial.println(F("Read error"));
-      }
     }
-    else if (comando == "l")
+    else
     {
-
-      printFailResults();
-
-      // --- Comando 'r': ejecutar función R ---
-    }
-    else if (comando == "r")
-    {
-      // reset = 1;
-      ESP.restart();
-    }
-    else if (comando == "f")
-    {
-      fail = 0;
-      stsFailAmpLatch = 0;
-      stsFailCommLatch = 0;
-      stsFailVoltLatch = 0;
-    }
-    else if (comando == "p")
-    {
-    }
-    else if (comando == "s")
-    {
-      // bool oko;
-      // readVoltages(oko);
-      // checkFails(oko);
-      // setupExclusions();
-      // printExclusionLists();
-      // holdBMSOK = !holdBMSOK;
-      // Serial.println((String) "hold bms = " + holdBMSOK);
-
-      // --- Comando desconocido ---
-    }
-    else if (comando == "d")
-    {
-      showChargeData();
-      // --- Comando desconocido ---
-    }
-
-    else if (comando == "a")
-    {
-      configBMS();
-      // --- Comando desconocido ---
-    }
-    else if (comando == "b")
-    {
-      CommSleepToWake();
-      // --- Comando desconocido ---
-    }
-
-    else if (comando == "v")
-    {
-      // readAndDisplaySingleICRegisters(0);
-      // --- Comando desconocido ---
-    }
-
-    else if (comando == "w")
-    {
-      // readAndPrintSingleRegister(2, 0x0023);
-      //  --- Comando desconocido ---
-    }
-    else if (comando == "e")
-    {
-      imprimirDatosCSV(stsVoltCells, stsTempCells);
-    }
-
-    else if (comando.length() > 0)
-    {
-      Serial.print(F("-> ERR. Com desc:'"));
-      // Serial.print(comando);
-      // Serial.println(F("'"));
+      // If we get here, it means we received a string that isn't "c,..." and isn't 1 char.
+      // This is almost certainly NOISE. We ignore it completely.
+      // Serial.print(F("Ignored noise: ")); Serial.println(cmdBuffer);
     }
   }
 }
@@ -1000,6 +1013,7 @@ void configBMS()
     ok = AutoAddress();
     delay(200);
     stsNumAutoAdressingAttempts++;
+
   }
   if (stsNumAutoAdressingAttempts >= NUM_MAX_AUTOADRESSING_ATTEMPTS)
   {
