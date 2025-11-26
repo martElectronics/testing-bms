@@ -315,9 +315,11 @@ void loop()
   else
   {
     timeFail = millis();
+
+    //***COMENTAR ESTA LÍNEA PARA QUE SE TENGA QUE REINICIAR EL LV PARA QUE EL BMS PUEDA ESTAR OK DESPUES DE FALLO
+    stsFail=0;
   }
 
-  //Si stsFail se pone a true, se abre el SDC. Para ponerla a false hace falta reiniciar el ESP32
   if (stsFail)
   {
     cmdCharge = 0;
