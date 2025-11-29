@@ -578,8 +578,75 @@ void mostrarDatosDetallados()
 
   // Serial.println(F("\n--- Vista Detallada por Modulo ---")); // F() macro ahorra RAM
   // Serial.println(F("Modulo | Voltajes (V)                  | Temperaturas (C)"));
-  Serial.println(F("            1    2    3    4    5    6    7    8    9   10    11        1    2    3    4    5    6    7    8    9  "));
+  Serial.println(F("            1    2    3    4    5    6    7    8    9   10    11    V-    V+        1    2    3    4    5    6    7    8    9    T-   T+"));
   Serial.println(F("-----------------------------------------------------------------------------------------------------------------"));
+
+
+const int NUM_MODULES = TOTALBOARDS / 2;
+
+  // 3. PROCESAMIENTO Y CÁLCULO
+  
+  // --- Inicialización de ARRAYS estáticos ---
+  // Usamos static para que la memoria se reserve una sola vez, 
+  // pero debemos limpiar/reiniciar los valores dentro del bucle.
+
+
+
+
+  // --- Procesamiento del array de Voltajes ---
+  for (int i = 0; i < NUM_MODULES; i++)
+  { // Bucle por cada Módulo
+    
+    // REINICIAR valores para este módulo específico antes de mirar sus celdas
+    stsVoltCellsMin[i] = 5.0; // Iniciar con valor alto
+    stsVoltCellsMax[i] = 0.0; // Iniciar con valor bajo
+
+    for (int j = 0; j < 11; j++)
+    { // Bucle por cada Celda de voltaje
+      float v = stsVoltCells[i][j];
+      
+      // Comprobar Mínimo para el módulo 'i'
+      if (v < stsVoltCellsMin[i])
+      {
+        stsVoltCellsMin[i] = v;
+      }
+      
+      // Comprobar Máximo para el módulo 'i'
+      if (v > stsVoltCellsMax[i])
+      {
+        stsVoltCellsMax[i] = v;
+      }
+      
+    }
+  }
+
+  // --- Procesamiento del array de Temperaturas ---
+  for (int i = 0; i < NUM_MODULES; i++)
+  { // Bucle por cada Módulo
+
+    // REINICIAR valores para este módulo específico
+    stsTempCellsMin[i] = 100.0; // Iniciar con valor alto
+    stsTempCellsMax[i] = -20.0; // Iniciar con valor bajo
+
+    for (int j = 0; j < 9; j++)
+    { // Bucle por cada Sensor de temperatura
+      float t = stsTempCells[i][j];
+      
+      // Comprobar Mínimo para el módulo 'i'
+      if (t < stsTempCellsMin[i])
+      {
+        stsTempCellsMin[i] = t;
+      }
+      
+      // Comprobar Máximo para el módulo 'i'
+      if (t > stsTempCellsMax[i])
+      {
+        stsTempCellsMax[i] = t;
+      }
+    }
+  }
+
+
 
   // Bucle a través de cada módulo
   for (int i = 0; i < TOTALBOARDS / 2; i++)
@@ -599,7 +666,11 @@ void mostrarDatosDetallados()
       Serial.print(stsVoltCells[i][j], 2); // Imprime con 2 decimales
       Serial.print(" ");
     }
-
+    Serial.print("  ");
+    Serial.print(stsVoltCellsMin[i], 2); // Imprime con 2 decimales
+      Serial.print(" ");
+Serial.print(stsVoltCellsMax[i], 2); // Imprime con 2 decimales
+      Serial.print(" ");
     Serial.print("| T: ");
 
     // Imprime las 9 temperaturas para el módulo actual
@@ -608,7 +679,11 @@ void mostrarDatosDetallados()
       Serial.print(stsTempCells[i][j], 1); // Imprime con 1 decimal
       Serial.print(" ");
     }
-
+    Serial.print("  ");
+    Serial.print(stsTempCellsMin[i], 1); // Imprime con 1 decimal
+      Serial.print(" ");
+      Serial.print(stsTempCellsMax[i], 1); // Imprime con 1 decimal
+      Serial.print(" ");
     Serial.println(); // Salto de línea para el siguiente módulo
   }
   Serial.println(F("------------------------------------------------------------------"));
