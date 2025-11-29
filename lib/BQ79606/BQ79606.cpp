@@ -39,7 +39,7 @@ void Ini_ESP(){
     digitalWrite(Wake_pin, HIGH);
 
 	pinMode(BMS_OK, OUTPUT);
-	digitalWrite(BMS_OK, HIGH);
+	//digitalWrite(BMS_OK, HIGH);
 
 	//Fault pin Inicialization
 	pinMode(Fault_pin, INPUT);

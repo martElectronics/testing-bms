@@ -20,7 +20,12 @@ const int SENSORS_PER_MODULE_TEMP = 9;
 
 // En estos arrays se guardan las temperaturas y los voltajes de los módulos
 float stsVoltCells[12][11];
+float stsVoltCellsMin[12];
+float stsVoltCellsMax[12];
 float stsTempCells[12][9];
+float stsTempCellsMin[12];
+float stsTempCellsMax[12];
+
 
 // Estado de la comunicación
 unsigned int numCRCFails = 0;
@@ -151,11 +156,13 @@ void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]);
 
 void setup()
 {
+  pinMode(BMS_OK, OUTPUT);
+  digitalWrite(BMS_OK, false);
+  //delay(10000);
   Serial.begin(115200);
   static int t = millis();
 
-  pinMode(BMS_OK, OUTPUT);
-  digitalWrite(BMS_OK, false);
+
 
   bool ok = false;
   configBMS();
@@ -307,6 +314,10 @@ void loop()
         {
         configBMS();
         stsTriedToResetComm=true;
+        }
+        else
+        {
+          stsFail = 1;
         }
       }
     }
@@ -743,19 +754,19 @@ void showChargeData()
   Serial.print("V:{");
   Serial.print(minVolt, 2);
   Serial.print("V@M");
-  Serial.print(moduloMinVolt);
+  Serial.print(moduloMinVolt+1);
   Serial.print(" ~ ");
   Serial.print(maxVolt, 2);
   Serial.print("V@M");
-  Serial.print(moduloMaxVolt);
+  Serial.print(moduloMaxVolt+1);
   Serial.print("} T:{");
   Serial.print(minTemp, 1);
   Serial.print("C@M");
-  Serial.print(moduloMinTemp);
+  Serial.print(moduloMinTemp+1);
   Serial.print(" ~ ");
   Serial.print(maxTemp, 1);
   Serial.print("C@M");
-  Serial.print(moduloMaxTemp);
+  Serial.print(moduloMaxTemp+1);
   Serial.print("} | V_total:");
   Serial.print(sumaTotalVolt, 2);
   Serial.print("V | T_media:");
