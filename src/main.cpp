@@ -158,6 +158,7 @@ void setup()
 {
   pinMode(BMS_OK, OUTPUT);
   digitalWrite(BMS_OK, false);
+  
   //delay(10000);
   Serial.begin(115200);
   static int t = millis();
@@ -182,6 +183,7 @@ void setup()
 
   ledcSetup(pwmChannel, pwmFrequency, pwmResolution);
   ledcAttachPin(pwmPin, pwmChannel);
+  ledcWrite(pwmChannel, 0);
 
   Serial.println("Reset reason: ");
   Serial.println(esp_reset_reason());
@@ -542,11 +544,11 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
         break;
       
       // Debug/Unused commands kept for compatibility
-      case 'p':
+      
       case 's':
-      case 'v':
-      case 'w':
-        break;
+      BqShutdownAllDevices(); 
+      break;
+     
 
       default:
         // It's a single char, but not one we know. Likely noise. 

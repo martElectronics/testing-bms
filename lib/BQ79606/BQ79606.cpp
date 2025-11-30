@@ -1074,3 +1074,27 @@ void readAndPrintSingleRegister(uint8_t deviceID, uint16_t regAddress)
                 regAddress, registerValue, String(registerValue, 2).c_str());
   Serial.println("--- Read Complete ---");
 }
+
+int BqShutdownAllDevices() {
+    // 1. Target all devices in the stack simultaneously.
+    byte device_id = 0x00;        // 0x00 is used as the general broadcast address.
+    
+    // 2. Select the specific communication frame type.
+    byte write_type = FRMWRT_STK_NR; // Stack Write (No Response expected), command 0x30.
+
+    // 3. Define the register and data to be written.
+    uint16_t register_address = COMM_CTRL;             // Address 0x0200 (Communication Control)
+    uint64_t shutdown_data    = 0x0002; // Data 0x0002 (Sets the SHUTDOWN bit (Bit 1))
+    
+    // 4. The register is 16-bits.
+    byte data_length = 2; // Write 2 bytes (16-bit register)
+
+    // Execute the broadcast command via the framework's communication function
+    return WriteReg(
+        device_id,
+        register_address,
+        shutdown_data,
+        data_length,
+        write_type
+    );
+}

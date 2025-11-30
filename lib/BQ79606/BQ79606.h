@@ -7,8 +7,8 @@ extern bool stsLoopStarted;
 extern byte stsNumAutoadressedDevices;
 
 // User defines
-#define TOTALBOARDS 18   //MUST SET: total boards in the stack
-#define BAUDRATE  125000
+#define TOTALBOARDS 20   //MUST SET: total boards in the stack
+#define BAUDRATE  250000
     //set global baudrate   //a 500000 tarda 340ms en leer todas las tensiones
 #define MAXBYTES  6*2        //6 CELLS, 2 byteS EACH
 #define Wake_pin  7         //Wake up pin number in ESP32   //pin 18 en perforada   //pin7 en bmsMaster
@@ -525,5 +525,7 @@ void configBMS();
 
 void readAndDisplaySingleICRegisters(uint8_t deviceID);
 void readAndPrintSingleRegister(uint8_t deviceID, uint16_t regAddress);
+
+int BqShutdownAllDevices();
 
 #endif
