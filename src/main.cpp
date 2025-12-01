@@ -42,7 +42,7 @@ byte stsFailCommLatch = 0, stsFailVoltLatch = 0, stsFailAmpLatch = 0;
 // --- Márgenes Parametrizables ---
 const float MIN_VALID_VOLTAGE = 2.8f;
 const float MAX_VALID_VOLTAGE = 4.2f;
-const float MIN_VALID_TEMP = 5.0f;
+const float MIN_VALID_TEMP = -20.0f;
 const float MAX_VALID_TEMP = 30.0f;
 
 // --- Arrays de Resultados (Fallas) ---
@@ -252,7 +252,7 @@ void loop()
   stsCorrienteCarga = abs(2943 - adcCurrentValue) / 3; // sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
 
   // stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
-  stsAMPOK = (stsCorrienteCarga <= 10); // A 1 está ok, a 0 fail
+  stsAMPOK = (stsCorrienteCarga <= 100); // A 1 está ok, a 0 fail
 
  
   
@@ -1209,7 +1209,7 @@ void printFailResults()
   Serial.println(F("\n-F.Volt (1=FAIL, 0=OK) ---"));
   for (int i = 0; i < MAX_MODULES; ++i)
   {
-    Serial.printf(" Modulo %02d: ", i);
+    Serial.printf(" Modulo %02d: ", i+1);
     for (int j = 0; j < SENSORS_PER_MODULE_VOLT; ++j)
     {
       if (stsVoltCellsFail[i][j])
@@ -1222,7 +1222,7 @@ void printFailResults()
   Serial.println(F("\n--- F.TEMP ---"));
   for (int i = 0; i < MAX_MODULES; ++i)
   {
-    Serial.printf(" Modulo %02d: ", i);
+    Serial.printf(" Modulo %02d: ", i+1);
     for (int j = 0; j < SENSORS_PER_MODULE_TEMP; ++j)
     {
       if (stsTempCellsFail[i][j])

@@ -67,7 +67,7 @@ void Ini_ESP(){
 void Wake79606() {
     // toggle wake signal
     digitalWrite(Wake_pin, LOW);  // assert wake (active low)
-    delayMicroseconds(320);       //250us to 300us
+    delayMicroseconds(300);       //250us to 300us
     digitalWrite(Wake_pin, HIGH); // deassert wake
     delay(12*TOTALBOARDS);        //tSU(WAKE) transition time from shutdown to active - 7ms from wake receive to wake propagate for each device
 }
@@ -330,7 +330,6 @@ bool AutoAddress()
     //Single device write CONFIG=0x00 to device TOTALBOARDS-1 (top of stack)
     WriteReg(TOTALBOARDS-1, CONFIG, 0x03, 1, FRMWRT_SGL_NR);
 
-    
      ReadReg(TOTALBOARDS-1, ECC_TEST, response_frame2, 1, 0, FRMWRT_ALL_R);
     // // 5. Configure Base, Stack, and Top of Stack Devices [cite: 201]
     // if(TOTALBOARDS == 1)
