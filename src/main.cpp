@@ -30,6 +30,7 @@ float stsTempCellsMax[12];
 // Estado de la comunicación
 unsigned int numCRCFails = 0;
 unsigned int numCOMMFails = 0;
+unsigned int numResets = 0;
 bool holdBMSOK = false; //!!!!!! CUIDADO !!! Si esta variable está a true, se ignoran los fallos del BMS
 byte stsNumAutoadressedDevices = 0;
 byte stsNumAutoAdressingAttempts = 0;
@@ -39,11 +40,14 @@ bool stsTriedToResetComm = false;
 // Estas variables guardan el estado de fallo aunque la causa ya no esté presente, para ponerlos a '0', pulsar la 'r'
 byte stsFailCommLatch = 0, stsFailVoltLatch = 0, stsFailAmpLatch = 0;
 
+//Variables de comprobación
+uint16_t stsLastTotalFailTime=0;
+
 // --- Márgenes Parametrizables ---
 const float MIN_VALID_VOLTAGE = 2.8f;
 const float MAX_VALID_VOLTAGE = 4.2f;
-const float MIN_VALID_TEMP = -20.0f;
-const float MAX_VALID_TEMP = 30.0f;
+const float MIN_VALID_TEMP = -300.0f;
+const float MAX_VALID_TEMP = 40.0f;
 
 // --- Arrays de Resultados (Fallas) ---
 bool stsVoltCellsFail[MAX_MODULES][SENSORS_PER_MODULE_VOLT];
@@ -63,9 +67,9 @@ double stsCorrienteCarga = 0;
 //****** PWM    */
 const int pwmChannel = 0;
 const int pwmPin = PWM_FANS;
-const int pwmFrequency = 5000;
+const int pwmFrequency = 1000;
 const int pwmResolution = 8;
-int pwmPorcentaje = 50;
+int pwmPorcentaje = 0;
 
 /**
 Lee las tensiones de las celdas y los voltajes de los NTC y las guarda en: "stsVoltCells" y "stsTempCells".
@@ -291,26 +295,26 @@ void loop()
     stsFailAmpLatch = true;
 
   static unsigned long int timeFail = millis();
-  const unsigned int timeToFail = 1000;
+  const unsigned int timeToFail = 3000;
   static long int contFail = 0;
 
   //** Rutina de activación de fallo */
   /*
     Si se da la condición de fallo durante más de "timeToFail" milisegundos:
-      Situación 1 - Si el fallo se debe a problema de comunicación entre el esp32 y los esclavos, se vuelve a hacer el AutoAdressing
-        para intentar reestablecer la comunicación, si no se consigue (stsAutoAdressingOK=false), se abre el SDC
+      Situación 1 - Si el fallo se debe a problema de comunicación entre el esp32 y los esclavos y este está presente durante más del tiempo establecido "timeToFail", se vuelve a hacer el AutoAdressing
+        para intentar reestablecer la comunicación pasado el tiem, si no se consigue (stsAutoAdressingOK=false), se abre el SDC
       Situación 2 - Si es por fallo de voltaje, amperímetro o fallo del autoadressing, se abre el SDC inmediatamente
   */
 
   if (failCondition)
   {
-    if ((millis() - timeFail) > timeToFail)
+    if(!(stsVoltagesOK && stsAMPOK && stsAutoadressingOK))
     {
-      if (!(stsVoltagesOK && stsAMPOK && stsAutoadressingOK)) // Situación 2
-      {
-        stsFail = 1;
-      }
-      else if (!stsCommOK) // Situación 1
+      stsFail=1;
+    }
+    else if ((millis() - timeFail) > timeToFail)
+    {
+      if (!stsCommOK) // Situación 1
       {
         if(!stsTriedToResetComm)
         {
@@ -325,6 +329,7 @@ void loop()
     }
     // Serial.println(millis()-timeFail);
   }
+
   else
   {
     timeFail = millis();
@@ -338,7 +343,6 @@ void loop()
     cmdCharge = 0;
     corrienteCargaTarget = 0;
     digitalWrite(BMS_OK, false);
-    
   }
   else
   {
@@ -348,7 +352,7 @@ void loop()
 
   //** CHARGE CONTROL*/
 
-  controlCharge(456, corrienteCargaTarget, cmdCharge);
+  //controlCharge(456, corrienteCargaTarget, cmdCharge);
   //** PWM CONTROL*/
   if (pwmPorcentaje > 100)
     pwmPorcentaje = 100;
@@ -358,12 +362,20 @@ void loop()
   uint32_t pwmDutyCycle = static_cast<uint32_t>(pwmDutyCycleFloat);
   ledcWrite(pwmChannel, pwmDutyCycle);
 
+
+  //Time error count
+  stsLastTotalFailTime= (millis() - timeFail);
+  static uint16_t array1[4];
+  array1[0]=stsLastTotalFailTime;
+  CAN.setPacket(14,array1,4);
+ 
+
   //** CAN SEND */
   CAN.send();
 
   //** DEBUG */
   static int t = millis();
-  if ((millis() - t) >= 1000)
+  if ((millis() - t) >= 2000)
   {
     // Serial.println((String)"I= "+corrienteCargaTarget+" cmdCharge= "+cmdCharge +" reset= "+cmdResetFail+ " ok= "+stsVoltagesOK);
 
@@ -390,6 +402,10 @@ Serial.print(F("Amp(Current,VoltADC)= "));
 Serial.print(stsCorrienteCarga);
 Serial.print(F(", "));
 Serial.println(adcCurrentValue);
+
+Serial.print(F("Tried reset: "));
+Serial.print(stsTriedToResetComm);
+
 
 
 
