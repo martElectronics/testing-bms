@@ -172,121 +172,8 @@ void CommReset(int BAUD) {
     delayMicroseconds(100);
 }
 
-//**********
-//END PINGS
-//**********
 
 
-
-//**********************
-//AUTO ADDRESS SEQUENCE
-//**********************
-// bool AutoAddress()
-// {
-// 	int t=50;
-//     memset(response_frame2,0,sizeof(response_frame2)); //clear out the response frame buffer
-
-//     //dummy write to ECC_TEST (sync DLL)
-//     WriteReg(0,  ECC_TEST, 0x00, 1, FRMWRT_ALL_NR);
-// 	delay(t);
-
-// 	//clear CONFIG in case it is set
-//     WriteReg(0, CONFIG, 0x00, 1, FRMWRT_ALL_NR);
-// 	delay(t);
-
-//     //enter auto addressing mode
-//     WriteReg(0, CONTROL1, 0x01, 1, FRMWRT_ALL_NR);
-// 	delay(t);
-
-//     //set addresses for all boards in daisy-chain
-//     for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++)
-//     {
-//         WriteReg(0, DEVADD_USR, nCurrentBoard, 1, FRMWRT_ALL_NR);
-// 		delay(t);
-//     }
-
-
-
-
-//     //if there's only 1 board, it's the base AND the top of stack, so change it to those
-//     if(TOTALBOARDS==1)
-//     {
-//         WriteReg(0, CONFIG, 0x01, 1, FRMWRT_SGL_NR);	//Base and top device
-// 		delay(t);
-//     }
-//     //otherwise set the base and top of stack individually
-//     else
-//     {
-//        // Serial.println("++++++++++++++++");
-//         WriteReg(0, CONFIG, 0x00, 1, FRMWRT_SGL_NR);  //base
-
-// 		for (nCurrentBoard = 1; nCurrentBoard < (TOTALBOARDS-1); nCurrentBoard++)
-//     	{
-//         	WriteReg(nCurrentBoard, CONFIG, 0x02, 1, FRMWRT_SGL_NR); //Stack
-// 			delay(t);
-// 			Serial.println((String)"Setting "+ nCurrentBoard);
-//     	}
-		
-//         WriteReg((TOTALBOARDS - 1), CONFIG, 0x03, 1, FRMWRT_SGL_NR); //top of stack
-// 		delay(t);
-//     }
-
-
-// 	for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++)
-//     {
-//         //dummy read from ECC_TEST (sync DLL)
-//     	ReadReg(nCurrentBoard, ECC_TEST, response_frame2, 1, 0, FRMWRT_SGL_R);
-// 		delay(t);
-// 		Serial.println((String)"Getting "+ nCurrentBoard);
-//     }
-
-    
-
-// 	WriteReg(0, DAISY_CHAIN_CTRL, 0x0D, 1, FRMWRT_SGL_NR);  //base
-// 	delay(t);
-// 	WriteReg(1, COMM_CTRL, 0x04, 1, FRMWRT_STK_NR);  //stack
-// 	delay(t);
-// 	WriteReg((TOTALBOARDS - 1), DAISY_CHAIN_CTRL, 0x32, 1, FRMWRT_SGL_NR);  //Top
-// 	delay(t);
-
-
-
-// 	Serial.print("Addres: ");
-// 	delay(10);
-
-//     bool ok=true;
-// 	for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
-//         memset(response_frame2, 0, sizeof(response_frame2));
-//         ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
-// 		Serial.print((String)"Board "+nCurrentBoard+"= ");
-
-//         Serial.println(response_frame2[4]);
-// 		//Devuelve false si no se ha hecho bien el autoadressing
-// 		if(response_frame2[4]!=nCurrentBoard) 
-//         {
-//             ok=false; 
-//             stsNumAutoadressedDevices=nCurrentBoard+1;
-//         }
-
-// 		delay(10);
-
-// 	}
-//     Serial.println((String)"Num Autoadressed Devices= "+stsNumAutoadressedDevices);
-//     Serial.println();
-// 	delay(200);
-
-
-// //    //OPTIONAL: read back all device addresses
-// //    for (nCurrentBoard = 0; nCurrentBoard < TOTALBOARDS; nCurrentBoard++) {
-// //        memset(response_frame2, 0, sizeof(response_frame2));
-// //        ReadReg(nCurrentBoard, DEVADD_USR, response_frame2, 1, 0, FRMWRT_SGL_R);
-// //        printf("Board %d=%02x\n",nCurrentBoard,response_frame2[4]);
-// //    }
-// return ok;
-// }
-//**************************
-//END AUTO ADDRESS SEQUENCE
-//**************************
 
 //**********************
 //AUTO ADDRESS SEQUENCE
@@ -591,7 +478,7 @@ int WriteFrame(byte bID, uint16_t wAddr, byte * pData, byte bLen, byte bWriteTyp
 int ReadReg(byte bID, uint16_t wAddr, byte * pData, byte bLen, uint32_t dwTimeOut, byte bWriteType) {
     int Reciving_Len = 0;
     int bytes_read = 0;
-    const uint32_t DEFAULT_TIMEOUT_MS = 50; // Set a default timeout
+    const uint32_t DEFAULT_TIMEOUT_MS = 10; // Set a default timeout
 
     // --- 1. Calculate expected response length ---
     if(bWriteType == FRMWRT_SGL_R){

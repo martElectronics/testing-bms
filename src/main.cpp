@@ -25,6 +25,10 @@ float stsVoltCellsMax[12];
 float stsTempCells[12][9];
 float stsTempCellsMin[12];
 float stsTempCellsMax[12];
+  float minVolt = 5.0; // Iniciar con un valor alto
+  float maxVolt = 0.0; // Iniciar con un valor bajo
+    float minTemp = 100.0; // Iniciar con un valor alto
+  float maxTemp = -20.0; // Iniciar con un valor bajo
 
 
 // Estado de la comunicación
@@ -35,7 +39,8 @@ bool holdBMSOK = false; //!!!!!! CUIDADO !!! Si esta variable está a true, se i
 byte stsNumAutoadressedDevices = 0;
 byte stsNumAutoAdressingAttempts = 0;
 bool stsAutoadressingOK = false;
-bool stsTriedToResetComm = false;
+uint16_t stsNumTriesToResetComm = false;
+#define NUM_TRIES_TO_RESET_COMM 5
 
 // Estas variables guardan el estado de fallo aunque la causa ya no esté presente, para ponerlos a '0', pulsar la 'r'
 byte stsFailCommLatch = 0, stsFailVoltLatch = 0, stsFailAmpLatch = 0;
@@ -214,7 +219,11 @@ void setup()
   Serial.println("---=============================---");
 
 
-  // Serial.println(F( "INSTRUCCIONES DE USO DEL PROGRAMA:  - Pulsar 'i' para mostrar los voltajes y temperaturas de todos los módulos. Pulsar 'l' para mostrar fallos de tensión y temperatura"));
+    //CAN SETUP
+  
+  CAN.setPacketTimer(10,1000);
+  CAN.setPacketTimer(11,1000);
+  CAN.setPacketTimer(14,200);
 }
 
 void loop()
@@ -316,10 +325,10 @@ void loop()
     {
       if (!stsCommOK) // Situación 1
       {
-        if(!stsTriedToResetComm)
+        if(stsNumTriesToResetComm<5)
         {
         configBMS();
-        stsTriedToResetComm=true;
+        stsNumTriesToResetComm++;
         }
         else
         {
@@ -346,6 +355,7 @@ void loop()
   }
   else
   {
+    if(stsCommOK) stsNumTriesToResetComm=0;
     digitalWrite(BMS_OK, true);
     flagShow = 0;
   }
@@ -367,7 +377,31 @@ void loop()
   stsLastTotalFailTime= (millis() - timeFail);
   static uint16_t array1[4];
   array1[0]=stsLastTotalFailTime;
+  array1[1]=numCOMMFails;
+  array1[2]=numCRCFails;
   CAN.setPacket(14,array1,4);
+
+  //BMS Status CAN SEND
+  static uint8_t array2[8];
+  array2[0]=stsFail;
+  array2[1]=0;
+  array2[2]=0;
+  array2[3]=0;
+  array2[4]=stsFailCommLatch;
+  array2[5]=stsFailVoltLatch;
+  array2[6]=stsFailAmpLatch;
+  array2[7]=stsAutoadressingOK;
+  CAN.setPacket(10,array2,8);
+
+  static int16_t array3[4];
+  array3[0]=(int16_t)maxTemp;
+  array3[1]=(int16_t)(maxVolt*1000);
+  array3[2]=(int16_t)(minVolt*1000);
+  array3[3]=(int16_t)minTemp;
+  CAN.setPacket(11,array2,4);
+
+
+
  
 
   //** CAN SEND */
@@ -404,7 +438,7 @@ Serial.print(F(", "));
 Serial.println(adcCurrentValue);
 
 Serial.print(F("Tried reset: "));
-Serial.print(stsTriedToResetComm);
+Serial.print(stsNumTriesToResetComm);
 
 
 
@@ -784,18 +818,18 @@ void mostrarDatosDetalladosOptimizado()
   Serial.println(F("------------------------------------------------------------------"));
 }
 
+
+
 void showChargeData()
 {
   // 3. PROCESAMIENTO Y CÁLCULO
   // --- Inicialización de variables de resultados ---
-  float minVolt = 5.0; // Iniciar con un valor alto
-  float maxVolt = 0.0; // Iniciar con un valor bajo
+
   int moduloMinVolt = 0;
   int moduloMaxVolt = 0;
   float sumaTotalVolt = 0.0;
 
-  float minTemp = 100.0; // Iniciar con un valor alto
-  float maxTemp = -20.0; // Iniciar con un valor bajo
+
   int moduloMinTemp = 0;
   int moduloMaxTemp = 0;
   float sumaTotalTemp = 0.0;
@@ -1110,14 +1144,15 @@ void configBMS()
   stsAutoadressingOK = true;
   while (!ok && stsNumAutoAdressingAttempts < NUM_MAX_AUTOADRESSING_ATTEMPTS)
   {
+    static int tWait=200;
     Serial.print("Attempt: ");
     Serial.println(stsNumAutoAdressingAttempts);
     Wake79606();
-    delay(200);
+    delay(tWait);
     CommReset(BAUDRATE);
-    delay(200);
+    delay(tWait);
     ok = AutoAddress();
-    delay(200);
+    delay(tWait);
     stsNumAutoAdressingAttempts++;
 
   }
