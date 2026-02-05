@@ -6,6 +6,21 @@
 #include "SensorCorriente.cpp"
 #include <esp_task_wdt.h>
 
+// ============================================================
+// PINES (AÑADIDOS DESDE LA LÓGICA NUEVA DE AIRs)
+// ============================================================
+constexpr uint8_t PIN_AIR_PLUS_CTRL   = 38;
+constexpr uint8_t PIN_AIR_MINUS_CTRL  = 35;
+
+constexpr uint8_t PIN_SDC_END_PRECH   = 3;
+constexpr uint8_t PIN_AIRS_NO_STATE   = 5;
+constexpr uint8_t PIN_SDC_BMS_IMD     = 1;
+
+constexpr uint8_t PIN_TSON            = 2;   // Pulsador TSON (PULLDOWN)
+
+constexpr int N_MUESTRAS = 20;
+
+
 // LED
 #define LED_PIN 48
 #define LED_COUNT 1
@@ -23,13 +38,10 @@ float stsVoltCells[12][11];
 float stsVoltCellsMin[12];
 float stsVoltCellsMax[12];
 float stsTempCells[12][9];
-float stsTempCellsMin[12];
-float stsTempCellsMax[12];
-  float minVolt = 5.0; // Iniciar con un valor alto
-  float maxVolt = 0.0; // Iniciar con un valor bajo
-    float minTemp = 100.0; // Iniciar con un valor alto
-  float maxTemp = -20.0; // Iniciar con un valor bajo
-
+float minVolt = 5.0; // Iniciar con un valor alto
+float maxVolt = 0.0; // Iniciar con un valor bajo
+float minTemp = 100.0; // Iniciar con un valor alto
+float maxTemp = -20.0; // Iniciar con un valor bajo
 
 // Estado de la comunicación
 unsigned int numCRCFails = 0;
@@ -75,6 +87,31 @@ const int pwmPin = PWM_FANS;
 const int pwmFrequency = 1000;
 const int pwmResolution = 8;
 int pwmPorcentaje = 0;
+
+// ============================================================
+// NUEVA LÓGICA AUX / TSON / PRECARGA / COHERENCIA
+// ============================================================
+
+float filtered_airs = 0.0f;
+int stable_aux_state = 0;
+int last_aux_state = 0;
+unsigned long aux_change_time = 0;
+float last_v_airs = 0.0f;
+
+bool tson_armed = false;
+bool last_tson_state = false;
+bool last_sdc_end = false;
+
+unsigned long precharge_start_time = 0;
+bool precharge_started = false;
+bool precharge_timeout_error = false;
+
+bool air_coherence_error = false;
+bool initial_check_done = false;
+
+// ============================================================
+// PROTOTIPOS
+// ============================================================
 
 /**
 Lee las tensiones de las celdas y los voltajes de los NTC y las guarda en: "stsVoltCells" y "stsTempCells".
@@ -135,9 +172,6 @@ Muestra las temperaturas detalladas de un módulo
 */
 void mostrarDatosDetalladosTemperaturas(int i);
 
-/**
-
-
 //**** FUNCIONES DE DEPURACIÓN */
 
 /**
@@ -161,69 +195,70 @@ void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]);
 #define TARGET_CHAR_TO_SDC 's'
 #define TARGET_CHAR_TO_LOOP l
 
-
+// ============================================================
+// SETUP
+// ============================================================
 
 void setup()
 {
-  pinMode(BMS_OK, OUTPUT);
-  digitalWrite(BMS_OK, false);
+    bool ok = false;
+    pinMode(BMS_OK, OUTPUT);
+    digitalWrite(BMS_OK, false);
+    pinMode(OE_TXS_PIN, OUTPUT);
+    digitalWrite(OE_TXS_PIN, HIGH);
   
-  //delay(10000);
-  Serial.begin(115200);
-  static int t = millis();
+    //delay(10000);
+    Serial.begin(115200);
+    static int t = millis();
+
+    configBMS();
+
+    while (CAN.error == 1)
+    {
+      Serial.println(F("Er.CAN"));
+    }
+    Serial.println(F("CAN OK"));
+    bool okk = false;
+    readVoltages2(okk);
+    checkFails(okk);
+    printFailResults();
+
+    setupExclusions(false);
+
+    ledcSetup(pwmChannel, pwmFrequency, pwmResolution);
+    ledcAttachPin(pwmPin, pwmChannel);
+    ledcWrite(pwmChannel, 0);
+
+    Serial.println("Reset reason: ");
+    Serial.println(esp_reset_reason());
+
+    Serial.println("---==[ RUNTIME MEMORY REPORT ]==---");
+
+    // This is the total free memory you have for ALL dynamic 
+    // allocations (new, malloc, other tasks, etc.)
+    Serial.printf("Free Heap (at setup): %u bytes\n", ESP.getFreeHeap());
+
+    // This is the "low water mark" for the heap. It tells you
+    // the smallest amount of free heap you've had so far.
+    Serial.printf("Min Free Heap (at setup): %u bytes\n", ESP.getMinFreeHeap());
+
+    // This is your check. It shows the minimum free space
+    // your 16,000-byte loop stack has had so far.
+    UBaseType_t stackHighWater = uxTaskGetStackHighWaterMark(NULL);
+    Serial.printf("Loop Stack HWM (minimum free): %u bytes\n", stackHighWater);
+
+    // You can calculate the "used" part from this
+    Serial.printf("Loop Stack Used (approx): %u bytes\n", 
+                  CONFIG_ARDUINO_LOOP_STACK_SIZE - stackHighWater);
+    
+    Serial.println("---=============================---");
 
 
-
-  bool ok = false;
-  configBMS();
-  while (CAN.error == 1)
-  {
-    Serial.println(F("Er.CAN"));
-  }
-  Serial.println(F("CAN OK"));
-  bool okk = false;
-  readVoltages2(okk);
-  checkFails(okk);
-  printFailResults();
-
-  // tempExclusionList.insert({.idModule = 1, .idNTC = 7});
-  setupExclusions(false);
-  // printExclusionLists();
-
-  ledcSetup(pwmChannel, pwmFrequency, pwmResolution);
-  ledcAttachPin(pwmPin, pwmChannel);
-  ledcWrite(pwmChannel, 0);
-
-  Serial.println("Reset reason: ");
-  Serial.println(esp_reset_reason());
-
-  Serial.println("---==[ RUNTIME MEMORY REPORT ]==---");
-
-  // This is the total free memory you have for ALL dynamic 
-  // allocations (new, malloc, other tasks, etc.)
-  Serial.printf("Free Heap (at setup): %u bytes\n", ESP.getFreeHeap());
-
-  // This is the "low water mark" for the heap. It tells you
-  // the smallest amount of free heap you've had so far.
-  Serial.printf("Min Free Heap (at setup): %u bytes\n", ESP.getMinFreeHeap());
-
-  // This is your check. It shows the minimum free space
-  // your 16,000-byte loop stack has had so far.
-  UBaseType_t stackHighWater = uxTaskGetStackHighWaterMark(NULL);
-  Serial.printf("Loop Stack HWM (minimum free): %u bytes\n", stackHighWater);
-
-  // You can calculate the "used" part from this
-  Serial.printf("Loop Stack Used (approx): %u bytes\n", 
-                 CONFIG_ARDUINO_LOOP_STACK_SIZE - stackHighWater);
-  
-  Serial.println("---=============================---");
-
-
-    //CAN SETUP
-  
-  CAN.setPacketTimer(10,1000);
-  CAN.setPacketTimer(11,1000);
-  CAN.setPacketTimer(14,200);
+      //CAN SETUP
+    
+    CAN.setPacketTimer(10,1000);
+    CAN.setPacketTimer(11,1000);
+    CAN.setPacketTimer(14,200);
 }
 
 void loop()
@@ -248,6 +283,118 @@ void loop()
 
   //** READ GPIO */
 
+  // ============================================================
+  // LECTURA ADC (NUEVA LÓGICA)
+  // ============================================================
+
+  auto readADC = [](int pin) -> float {
+    long acc = 0;
+    for (int i = 0; i < N_MUESTRAS; i++) {
+      acc += analogRead(pin);
+      delayMicroseconds(100);
+    }
+    return (acc / (float)N_MUESTRAS) * 3.3f / 4095.0f;
+  };
+
+  float v_sdc    = readADC(PIN_SDC_END_PRECH);
+  float v_airs   = readADC(PIN_AIRS_NO_STATE);
+  float v_bmsimd = readADC(PIN_SDC_BMS_IMD);
+
+  bool sdc_end       = (v_sdc > 1.0f);
+  bool precharge_done = (v_sdc > 2.5f);
+
+  // AUX ESTABLE (NUEVA LÓGICA)
+  auto decode_aux_stable = [](float v) -> int {
+    // 1) Filtro digital
+    filtered_airs = 0.8f * filtered_airs + 0.2f * v;
+
+    int new_state;
+    if (filtered_airs < 0.15f)      new_state = 0; // ambos abiertos
+    else if (filtered_airs < 0.70f) new_state = 2; // AUX- cerrado
+    else if (filtered_airs < 1.15f) new_state = 1; // AUX+ cerrado
+    else                            new_state = 3; // ambos cerrados
+
+    // Histeresis simple
+    if (new_state != last_aux_state) {
+      if (fabs(filtered_airs - last_v_airs) < 0.05f) {
+        return stable_aux_state;
+      }
+    }
+
+    // Debounce temporal
+    if (new_state != stable_aux_state) {
+      if (millis() - aux_change_time > 40) {
+        stable_aux_state = new_state;
+      }
+    } else {
+      aux_change_time = millis();
+    }
+
+    last_aux_state = new_state;
+    last_v_airs = filtered_airs;
+    return stable_aux_state;
+  };
+
+  int aux_idx = decode_aux_stable(v_airs);
+  bool aux_plus  = (aux_idx == 1 || aux_idx == 3);
+  bool aux_minus = (aux_idx == 2 || aux_idx == 3);
+
+  // ============================================================
+  // TSON (NUEVA LÓGICA)
+  // ============================================================
+  bool tson_state = digitalRead(PIN_TSON);
+  bool tson_rising_edge = (tson_state && !last_tson_state);
+  last_tson_state = tson_state;
+
+  if (tson_rising_edge && sdc_end) {
+    tson_armed = true;
+    Serial.println("🔘 TSON pulsado → AIR- ARMADO");
+  }
+
+  if (!sdc_end && last_sdc_end) {
+    tson_armed = false;
+    Serial.println("⚠️  SDC_end perdido → TSON DESARMADO");
+  }
+
+  last_sdc_end = sdc_end;
+
+  // ============================================================
+  // LÓGICA DE PRECARGA (NUEVA, PERO SIN TOCAR TU FALLA GLOBAL)
+  // ============================================================
+
+  if (!precharge_started && sdc_end && tson_armed && !precharge_done) {
+    precharge_start_time = millis();
+    precharge_started = true;
+    Serial.println("⚡ PRECARGA INICIADA");
+  }
+
+  if (precharge_started && !precharge_done) {
+    unsigned long elapsed = millis() - precharge_start_time;
+    if (elapsed > 5000) { // 5s timeout
+      if (!precharge_timeout_error) {
+        precharge_timeout_error = true;
+        Serial.println("🔴 ERROR: TIMEOUT DE PRECARGA (>5s)");
+      }
+    }
+  }
+
+  if (precharge_done && precharge_started) {
+    if (!precharge_timeout_error) {
+      Serial.println("✅ PRECARGA COMPLETADA");
+    }
+    precharge_started = false;
+  }
+
+  if (!sdc_end) {
+    if (precharge_started) {
+      precharge_started = false;
+      precharge_timeout_error = false;
+    }
+  }
+
+  // ============================================================
+  // CORRIENTE DE CARGA (TU LÓGICA ANTIGUA)
+  // ============================================================
   // AMP
   int adcCurrentValue = 0;
   int n = 200;
@@ -267,7 +414,9 @@ void loop()
   // stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
   stsAMPOK = (stsCorrienteCarga <= 100); // A 1 está ok, a 0 fail
 
- 
+  // ============================================================
+  // LECTURA DE CELDAS Y FALLOS (TU LÓGICA ANTIGUA)
+  // ============================================================
   
   int resReadVoltages = readVoltages2(stsCommOK);
   if (resReadVoltages == 0)
@@ -315,6 +464,43 @@ void loop()
       Situación 2 - Si es por fallo de voltaje, amperímetro o fallo del autoadressing, se abre el SDC inmediatamente
   */
 
+  // ============================================================
+  // CAPA NUEVA DE FALLO (PRECARGA / COHERENCIA) INYECTADA EN stsFail
+  // ============================================================
+
+  // Verificación inicial: solo se marca como hecha si no hay errores nuevos
+  if (!initial_check_done &&
+      !precharge_timeout_error &&
+      !air_coherence_error)
+  {
+    initial_check_done = true;
+  }
+
+  // Coherencia AIRs (solo si SDC activo)
+  air_coherence_error = false;
+  if (sdc_end)
+  {
+    if (air_plus_cmd != aux_plus)
+      air_coherence_error = true;
+    if (air_minus_cmd != aux_minus)
+      air_coherence_error = true;
+  }
+
+  bool newSafetyFail = false;
+
+  if (precharge_timeout_error)
+    newSafetyFail = true;
+
+  if (!initial_check_done)
+    newSafetyFail = true;
+
+  if (air_coherence_error)
+    newSafetyFail = true;
+
+  // ============================================================
+  // LÓGICA DE FALLO ANTIGUA 
+  // ============================================================
+
   if (failCondition)
   {
     if(!(stsVoltagesOK && stsAMPOK && stsAutoadressingOK))
@@ -347,6 +533,44 @@ void loop()
     stsFail=0;
   }
 
+    if (newSafetyFail)
+  {
+    stsFail = 1;
+  }
+
+  // ============================================================
+  // CONTROL DE AIRs (NUEVA LÓGICA, PERO RESPETANDO stsFail)
+  // ============================================================
+
+  bool air_plus_cmd = false;
+  bool air_minus_cmd = false;
+
+  // Solo permitimos cerrar AIRs si NO hay fallo global
+  if (!stsFail)
+  {
+    // AIR- depende de SDC y TSON armado
+    air_minus_cmd = (sdc_end && tson_armed);
+
+    // AIR+ solo si precarga completada y sin timeout
+    if (precharge_done && !precharge_timeout_error)
+      air_plus_cmd = true;
+  }
+
+  // Si hay incoherencia, forzamos fallo global
+  if (air_coherence_error)
+  {
+    stsFail = 1;
+  }
+
+  // Aplicar comandos a los pines físicos
+  pinMode(PIN_AIR_PLUS_CTRL, OUTPUT);
+  pinMode(PIN_AIR_MINUS_CTRL, OUTPUT);
+  digitalWrite(PIN_AIR_PLUS_CTRL,  air_plus_cmd  ? LOW : HIGH);
+  digitalWrite(PIN_AIR_MINUS_CTRL, air_minus_cmd ? LOW : HIGH);
+
+  // ============================================================
+  // BMS_OK FINAL 
+  // ============================================================
   if (stsFail)
   {
     cmdCharge = 0;
@@ -360,7 +584,9 @@ void loop()
     flagShow = 0;
   }
 
-  //** CHARGE CONTROL*/
+  // ============================================================
+  // CONTROL CARGA / PWM / CAN / DEBUG (TU LÓGICA ANTIGUA)
+  // ============================================================
 
   //controlCharge(456, corrienteCargaTarget, cmdCharge);
   //** PWM CONTROL*/
@@ -399,10 +625,6 @@ void loop()
   array3[2]=(int16_t)(minVolt*1000);
   array3[3]=(int16_t)minTemp;
   CAN.setPacket(11,array2,4);
-
-
-
- 
 
   //** CAN SEND */
   CAN.send();
