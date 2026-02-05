@@ -369,79 +369,173 @@ void loop()
   bool aux_minus = (aux_idx == 2 || aux_idx == 3);
 
   // ============================================================
-  // TSON (NUEVA LÓGICA)
+  // LÓGICA TSON / PRECARGA / AIRs / COHERENCIA (VERSIÓN CORREGIDA)
   // ============================================================
+
+  // --- TSON ---
   bool tson_state = digitalRead(PIN_TSON);
   bool tson_rising_edge = (tson_state && !last_tson_state);
   last_tson_state = tson_state;
 
   if (tson_rising_edge && sdc_end) {
-    tson_armed = true;
-    Serial.println("🔘 TSON pulsado → AIR- ARMADO");
+      tson_armed = true;
+      Serial.println("🔘 TSON pulsado → AIR- ARMADO");
   }
 
   if (!sdc_end && last_sdc_end) {
-    tson_armed = false;
-    Serial.println("⚠️  SDC_end perdido → TSON DESARMADO");
+      tson_armed = false;
+      Serial.println("⚠️  SDC_end perdido → TSON DESARMADO");
   }
 
   last_sdc_end = sdc_end;
 
-  // ============================================================
-  // LÓGICA DE PRECARGA (NUEVA, PERO SIN TOCAR TU FALLA GLOBAL)
-  // ============================================================
+  // --- PRECARGA ---
+  constexpr unsigned long PRECHARGE_TIMEOUT_MS = 5000;
 
   if (!precharge_started && sdc_end && tson_armed && !precharge_done) {
-    precharge_start_time = millis();
-    precharge_started = true;
-    Serial.println("⚡ PRECARGA INICIADA");
+      precharge_start_time = millis();
+      precharge_started = true;
+      Serial.println("⚡ PRECARGA INICIADA");
   }
 
   if (precharge_started && !precharge_done) {
-    unsigned long elapsed = millis() - precharge_start_time;
-    if (elapsed > 5000) { // 5s timeout
-      if (!precharge_timeout_error) {
-        precharge_timeout_error = true;
-        Serial.println("🔴 ERROR: TIMEOUT DE PRECARGA (>5s)");
+      unsigned long elapsed = millis() - precharge_start_time;
+      if (elapsed > PRECHARGE_TIMEOUT_MS && !precharge_timeout_error) {
+          precharge_timeout_error = true;
+          Serial.println("🔴 ERROR: TIMEOUT DE PRECARGA");
       }
-    }
   }
 
   if (precharge_done && precharge_started) {
-    if (!precharge_timeout_error) {
-      Serial.println("✅ PRECARGA COMPLETADA");
-    }
-    precharge_started = false;
+      if (!precharge_timeout_error)
+          Serial.println("✅ PRECARGA COMPLETADA");
+      precharge_started = false;
   }
 
   if (!sdc_end) {
-    if (precharge_started) {
+      if (precharge_started)
+          Serial.println("⚠️  Precarga abortada: SDC abierto");
       precharge_started = false;
       precharge_timeout_error = false;
-    }
   }
 
   // ============================================================
-  // CORRIENTE DE CARGA 
+  // CÁLCULO DE COMANDOS AIRs (CORREGIDO)
   // ============================================================
-  // AMP
-  int adcCurrentValue = 0;
-  int n = 200;
-  for (int i = 0; i < n; i++)
+
+  bool air_plus_cmd = false;
+  bool air_minus_cmd = false;
+
+  // Solo permitir cerrar AIRs si NO hay fallo global
+  if (!stsFail)
   {
-    adcCurrentValue += analogRead(AMP_PIN);
-    delayMicroseconds(100);
+      air_minus_cmd = (sdc_end && tson_armed);
+      air_plus_cmd  = (precharge_done && !precharge_timeout_error);
   }
-  adcCurrentValue = adcCurrentValue / n;
-  //** PROCESS DATA */
 
+  // ============================================================
+  // COHERENCIA AIRs (CORREGIDO)
+  // ============================================================
+
+  air_coherence_error = false;
+
+  if (sdc_end)
+  {
+      if (air_plus_cmd  != aux_plus)  air_coherence_error = true;
+      if (air_minus_cmd != aux_minus) air_coherence_error = true;
+  }
+
+  // ============================================================
+  // CAPA DE SEGURIDAD (CORREGIDA)
+  // ============================================================
+
+  bool newSafetyFail = false;
+
+  if (precharge_timeout_error) newSafetyFail = true;
+  if (!initial_check_done)     newSafetyFail = true;
+  if (air_coherence_error)     newSafetyFail = true;
+
+  // Aplicar fallo de seguridad
+  if (newSafetyFail)
+      stsFail = 1;
+
+  // ============================================================
+  // APLICAR COMANDOS A HARDWARE
+  // ============================================================
+
+  digitalWrite(PIN_AIR_PLUS_CTRL,  air_plus_cmd  ? LOW : HIGH);
+  digitalWrite(PIN_AIR_MINUS_CTRL, air_minus_cmd ? LOW : HIGH);
+
+
+  // ============================================================
+  // LECTURA SENSOR HALL DHAB S/118 (Dual Range 30A / 350A)
+  // ============================================================
+
+  // Pines del sensor (ajusta si hace falta)
+  const int PIN_HALL_30A  = AMP_PIN;      // salida fina
+  const int PIN_HALL_350A = AMP_PIN_2;    // salida gruesa, recordar que en la placa estan cambiadas
+
+  // Leer ADC bruto
+  int adc30 = analogRead(PIN_HALL_30A);
+  int adc350 = analogRead(PIN_HALL_350A);
+
+  // ADC → Voltios
+  auto readADCvolts = [](int pin) -> float {
+      long acc = 0;
+      for (int i = 0; i < 50; i++) {
+          acc += analogRead(pin);
+          delayMicroseconds(100);
+      }
+      float adc = acc / 50.0f;
+      return adc * 3.3f / 4095.0f;
+  };
+
+  // Leer tensiones
+  float V30  = readADCvolts(PIN_HALL_30A);
+  float V350 = readADCvolts(PIN_HALL_350A);
+
+  // ============================================================
+  // CALIBRACIÓN (VALORES PROVISIONALES, AJUSTAR CON DATOS REALES)
+  // ============================================================
+
+  float V0_30   = 2.50f;
+  float V0_350  = 2.50f;
+
+  float S30     = 0.060f;   // V/A canal fino ±30A
+  float S350    = 0.008f;   // V/A canal grueso ±350A
+
+  float I30  = (V30  - V0_30)  / S30;
+  float I350 = (V350 - V0_350) / S350;
+
+  // ============================================================
+  // FUSIÓN INTELIGENTE DE RANGOS (BLENDING)
+  // ============================================================
+
+  float I_SW_LOW  = 20.0f;
+  float I_SW_HIGH = 28.0f;
+
+  float Iabs = fabs(I30);
+  float Ifinal = 0.0f;
+
+  if (Iabs <= I_SW_LOW) {
+      Ifinal = I30;
+  }
+  else if (Iabs >= I_SW_HIGH) {
+      Ifinal = I350;
+  }
+  else {
+      float w = (Iabs - I_SW_LOW) / (I_SW_HIGH - I_SW_LOW);
+      Ifinal = (1.0f - w) * I30 + w * I350;
+  }
+
+  // ============================================================
+  // RESULTADO FINAL
+  // ============================================================
+  //** PROCESS DATA */ 
   stsChargerOK = (stsChargerByte[4] == 0);
+  stsCorrienteCarga = Ifinal;
+  stsAMPOK = (fabs(stsCorrienteCarga) <= 100.0f);
 
-  // son 3 numeros de ADC por amperio
-  stsCorrienteCarga = abs(2943 - adcCurrentValue) / 3; // sensor1.calcularCorrienteS1(adcCurrentValue); //933 analog en reposo
-
-  // stsAMPOK = (sensor1.getVoltaje(adcCurrentValue) > 0.5);
-  stsAMPOK = (stsCorrienteCarga <= 100); // A 1 está ok, a 0 fail
 
   // ============================================================
   // LECTURA DE CELDAS Y FALLOS 
@@ -494,41 +588,6 @@ void loop()
   */
 
   // ============================================================
-  // CAPA NUEVA DE FALLO (PRECARGA / COHERENCIA) INYECTADA EN stsFail
-  // ============================================================
-
-  // Verificación inicial: solo se marca como hecha si no hay errores nuevos
-  if (!initial_check_done &&
-      !precharge_timeout_error &&
-      !air_coherence_error)
-  {
-    initial_check_done = true;
-  }
-
-  bool air_plus_cmd = false;
-  bool air_minus_cmd = false;
-  // Coherencia AIRs (solo si SDC activo)
-  air_coherence_error = false;
-  if (sdc_end)
-  {
-    if (air_plus_cmd != aux_plus)
-      air_coherence_error = true;
-    if (air_minus_cmd != aux_minus)
-      air_coherence_error = true;
-  }
-
-  bool newSafetyFail = false;
-
-  if (precharge_timeout_error)
-    newSafetyFail = true;
-
-  if (!initial_check_done)
-    newSafetyFail = true;
-
-  if (air_coherence_error)
-    newSafetyFail = true;
-
-  // ============================================================
   // LÓGICA DE FALLO ANTIGUA 
   // ============================================================
 
@@ -563,39 +622,7 @@ void loop()
     //***COMENTAR ESTA LÍNEA PARA QUE SE TENGA QUE REINICIAR EL LV PARA QUE EL BMS PUEDA ESTAR OK DESPUES DE FALLO
     stsFail=0;
   }
-
-    if (newSafetyFail)
-  {
-    stsFail = 1;
-  }
-
-  // ============================================================
-  // CONTROL DE AIRs (NUEVA LÓGICA, PERO RESPETANDO stsFail)
-  // ============================================================
-
-  // Solo permitimos cerrar AIRs si NO hay fallo global
-  if (!stsFail)
-  {
-    // AIR- depende de SDC y TSON armado
-    air_minus_cmd = (sdc_end && tson_armed);
-
-    // AIR+ solo si precarga completada y sin timeout
-    if (precharge_done && !precharge_timeout_error)
-      air_plus_cmd = true;
-  }
-
-  // Si hay incoherencia, forzamos fallo global
-  if (air_coherence_error)
-  {
-    stsFail = 1;
-  }
-
-  // Aplicar comandos a los pines físicos
-  pinMode(PIN_AIR_PLUS_CTRL, OUTPUT);
-  pinMode(PIN_AIR_MINUS_CTRL, OUTPUT);
-  digitalWrite(PIN_AIR_PLUS_CTRL,  air_plus_cmd  ? LOW : HIGH);
-  digitalWrite(PIN_AIR_MINUS_CTRL, air_minus_cmd ? LOW : HIGH);
-
+    
   // ============================================================
   // BMS_OK FINAL 
   // ============================================================
@@ -733,10 +760,15 @@ Serial.print(failCondition);
 Serial.print(F(", "));
 Serial.println(stsFail);
 
-Serial.print(F("Amp(Current,VoltADC)= "));
-Serial.print(stsCorrienteCarga);
-Serial.print(F(", "));
-Serial.println(adcCurrentValue);
+Serial.println("=== DHAB DEBUG ===");
+Serial.print("ADC30 = ");  Serial.println(adc30);
+Serial.print("ADC350 = "); Serial.println(adc350);
+Serial.print("V30 = ");  Serial.println(V30, 5);
+Serial.print("V350 = "); Serial.println(V350, 5);
+Serial.print("I30 = ");  Serial.println(I30, 3);
+Serial.print("I350 = "); Serial.println(I350, 3);
+Serial.print("Ifinal = "); Serial.println(stsCorrienteCarga, 3);
+
 
 Serial.print(F("Tried reset: "));
 Serial.print(stsNumTriesToResetComm);
