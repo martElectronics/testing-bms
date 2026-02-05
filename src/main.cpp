@@ -38,6 +38,8 @@ float stsVoltCells[12][11];
 float stsVoltCellsMin[12];
 float stsVoltCellsMax[12];
 float stsTempCells[12][9];
+float stsTempCellsMin[12];
+float stsTempCellsMax[12];
 float minVolt = 5.0; // Iniciar con un valor alto
 float maxVolt = 0.0; // Iniciar con un valor bajo
 float minTemp = 100.0; // Iniciar con un valor alto
@@ -192,8 +194,35 @@ void printExclusionLists();
 
 void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]);
 
+void mostrarEstadoBMS(bool sdc_end,
+                      bool precharge_done,
+                      bool tson_armed,
+                      bool air_plus_cmd,
+                      bool air_minus_cmd,
+                      bool aux_plus,
+                      bool aux_minus,
+                      bool precharge_timeout_error,
+                      bool air_coherence_error,
+                      bool initial_check_done,
+                      bool stsFail);
+
+
 #define TARGET_CHAR_TO_SDC 's'
 #define TARGET_CHAR_TO_LOOP l
+
+bool prev_sdc_end = false;
+bool prev_precharge_done = false;
+bool prev_tson_armed = false;
+bool prev_air_plus_cmd = false;
+bool prev_air_minus_cmd = false;
+bool prev_aux_plus = false;
+bool prev_aux_minus = false;
+bool prev_precharge_timeout_error = false;
+bool prev_air_coherence_error = false;
+bool prev_initial_check_done = false;
+bool prev_stsFail = false;
+
+bool force_show_state = false;
 
 // ============================================================
 // SETUP
@@ -393,7 +422,7 @@ void loop()
   }
 
   // ============================================================
-  // CORRIENTE DE CARGA (TU LÓGICA ANTIGUA)
+  // CORRIENTE DE CARGA 
   // ============================================================
   // AMP
   int adcCurrentValue = 0;
@@ -415,7 +444,7 @@ void loop()
   stsAMPOK = (stsCorrienteCarga <= 100); // A 1 está ok, a 0 fail
 
   // ============================================================
-  // LECTURA DE CELDAS Y FALLOS (TU LÓGICA ANTIGUA)
+  // LECTURA DE CELDAS Y FALLOS 
   // ============================================================
   
   int resReadVoltages = readVoltages2(stsCommOK);
@@ -476,6 +505,8 @@ void loop()
     initial_check_done = true;
   }
 
+  bool air_plus_cmd = false;
+  bool air_minus_cmd = false;
   // Coherencia AIRs (solo si SDC activo)
   air_coherence_error = false;
   if (sdc_end)
@@ -541,9 +572,6 @@ void loop()
   // ============================================================
   // CONTROL DE AIRs (NUEVA LÓGICA, PERO RESPETANDO stsFail)
   // ============================================================
-
-  bool air_plus_cmd = false;
-  bool air_minus_cmd = false;
 
   // Solo permitimos cerrar AIRs si NO hay fallo global
   if (!stsFail)
@@ -628,6 +656,57 @@ void loop()
 
   //** CAN SEND */
   CAN.send();
+
+// ============================================================
+// MOSTRAR ESTADO BMS SOLO SI HAY CAMBIOS O SI EL USUARIO LO PIDE
+// ============================================================
+
+bool changed =
+    (sdc_end != prev_sdc_end) ||
+    (precharge_done != prev_precharge_done) ||
+    (tson_armed != prev_tson_armed) ||
+    (air_plus_cmd != prev_air_plus_cmd) ||
+    (air_minus_cmd != prev_air_minus_cmd) ||
+    (aux_plus != prev_aux_plus) ||
+    (aux_minus != prev_aux_minus) ||
+    (precharge_timeout_error != prev_precharge_timeout_error) ||
+    (air_coherence_error != prev_air_coherence_error) ||
+    (initial_check_done != prev_initial_check_done) ||
+    (stsFail != prev_stsFail);
+
+// Mostrar si hay cambios o si el usuario lo pide
+if (changed || force_show_state)
+{
+    mostrarEstadoBMS(
+        sdc_end,
+        precharge_done,
+        tson_armed,
+        air_plus_cmd,
+        air_minus_cmd,
+        aux_plus,
+        aux_minus,
+        precharge_timeout_error,
+        air_coherence_error,
+        initial_check_done,
+        stsFail
+    );
+
+    force_show_state = false; // reset manual
+}
+
+// Actualizar snapshot
+prev_sdc_end = sdc_end;
+prev_precharge_done = precharge_done;
+prev_tson_armed = tson_armed;
+prev_air_plus_cmd = air_plus_cmd;
+prev_air_minus_cmd = air_minus_cmd;
+prev_aux_plus = aux_plus;
+prev_aux_minus = aux_minus;
+prev_precharge_timeout_error = precharge_timeout_error;
+prev_air_coherence_error = air_coherence_error;
+prev_initial_check_done = initial_check_done;
+prev_stsFail = stsFail;
+
 
   //** DEBUG */
   static int t = millis();
@@ -821,6 +900,10 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
       BqShutdownAllDevices(); 
       break;
      
+      case 'x':
+      force_show_state = true;
+      Serial.println("Mostrando estado AIRs...");
+      break;
 
       default:
         // It's a single char, but not one we know. Likely noise. 
@@ -1124,6 +1207,68 @@ void showChargeData()
 
   Serial.print(F("Charge Current :"));
   Serial.println(stsCorrienteCarga);
+}
+
+void mostrarEstadoBMS(bool sdc_end,
+                      bool precharge_done,
+                      bool tson_armed,
+                      bool air_plus_cmd,
+                      bool air_minus_cmd,
+                      bool aux_plus,
+                      bool aux_minus,
+                      bool precharge_timeout_error,
+                      bool air_coherence_error,
+                      bool initial_check_done,
+                      bool stsFail)
+{
+    Serial.println("\n╔════════════════════════════════════════╗");
+    Serial.println("║          ESTADO DEL SISTEMA BMS        ║");
+    Serial.println("╚════════════════════════════════════════╝");
+
+    // --- SDC ---
+    Serial.print("SDC_end: ");
+    Serial.println(sdc_end ? "CERRADO ✓" : "ABIERTO ✗");
+
+    // --- Precarga ---
+    Serial.print("Precarga completada: ");
+    Serial.println(precharge_done ? "SI ✓" : "NO ✗");
+
+    Serial.print("Timeout precarga: ");
+    Serial.println(precharge_timeout_error ? "SI 🔴" : "NO ✓");
+
+    // --- TSON ---
+    Serial.print("TSON armado: ");
+    Serial.println(tson_armed ? "SI ✓" : "NO ✗");
+
+    // --- AIRs comandados ---
+    Serial.println("\n--- AIRs (comando) ---");
+    Serial.print("AIR-: ");
+    Serial.println(air_minus_cmd ? "CERRADO 🔒" : "ABIERTO 🔓");
+
+    Serial.print("AIR+: ");
+    Serial.println(air_plus_cmd ? "CERRADO 🔒" : "ABIERTO 🔓");
+
+    // --- AUX reales ---
+    Serial.println("\n--- AUX (realimentación) ---");
+    Serial.print("AUX-: ");
+    Serial.println(aux_minus ? "CERRADO 🔒" : "ABIERTO 🔓");
+
+    Serial.print("AUX+: ");
+    Serial.println(aux_plus ? "CERRADO 🔒" : "ABIERTO 🔓");
+
+    // --- Coherencia ---
+    Serial.print("\nCoherencia AIRs: ");
+    Serial.println(air_coherence_error ? "INCOHERENTE 🔴" : "OK ✓");
+
+    // --- Verificación inicial ---
+    Serial.print("Verificación inicial: ");
+    Serial.println(initial_check_done ? "COMPLETADA ✓" : "PENDIENTE ✗");
+
+    // --- BMS_OK ---
+    Serial.print("\nBMS_OK: ");
+    Serial.println(stsFail ? "FALSE ❌" : "TRUE ✓");
+
+    Serial.println("════════════════════════════════════════");
 }
 
 float voltToTemp(float GPIOVoltage)
