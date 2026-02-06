@@ -235,6 +235,12 @@ void setup()
     digitalWrite(BMS_OK, false);
     pinMode(OE_TXS_PIN, OUTPUT);
     digitalWrite(OE_TXS_PIN, HIGH);
+    
+    // Configuración de pines AIRs
+    pinMode(PIN_AIR_PLUS_CTRL, OUTPUT);
+    pinMode(PIN_AIR_MINUS_CTRL, OUTPUT);
+    digitalWrite(PIN_AIR_PLUS_CTRL, HIGH);   // Abierto por defecto (lógica invertida)
+    digitalWrite(PIN_AIR_MINUS_CTRL, HIGH);  // Abierto por defecto (lógica invertida)
   
     //delay(10000);
     Serial.begin(115200);
@@ -446,6 +452,17 @@ void loop()
   }
 
   // ============================================================
+  // VERIFICACIÓN INICIAL 
+  // ============================================================
+
+  if (!initial_check_done &&
+      !precharge_timeout_error &&
+      !air_coherence_error)
+  {
+      initial_check_done = true;
+  }
+
+  // ============================================================
   // CAPA DE SEGURIDAD (CORREGIDA)
   // ============================================================
 
@@ -620,7 +637,9 @@ void loop()
     timeFail = millis();
 
     //***COMENTAR ESTA LÍNEA PARA QUE SE TENGA QUE REINICIAR EL LV PARA QUE EL BMS PUEDA ESTAR OK DESPUES DE FALLO
-    stsFail=0;
+    // Solo resetear stsFail si NO hay fallos de seguridad activos
+    if (!newSafetyFail)
+        stsFail=0;
   }
     
   // ============================================================
