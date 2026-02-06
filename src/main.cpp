@@ -241,6 +241,9 @@ void setup()
     pinMode(PIN_AIR_MINUS_CTRL, OUTPUT);
     digitalWrite(PIN_AIR_PLUS_CTRL, HIGH);   // Abierto por defecto (lógica invertida)
     digitalWrite(PIN_AIR_MINUS_CTRL, HIGH);  // Abierto por defecto (lógica invertida)
+    
+    // Configuración de pin TSON (pulsador con PULLDOWN externo)
+    pinMode(PIN_TSON, INPUT);
   
     //delay(10000);
     Serial.begin(115200);
@@ -248,11 +251,25 @@ void setup()
 
     configBMS();
 
-    while (CAN.error == 1)
+    // Inicialización CAN con timeout
+    int can_init_attempts = 0;
+    const int MAX_CAN_ATTEMPTS = 10;
+    
+    while (CAN.error == 1 && can_init_attempts < MAX_CAN_ATTEMPTS)
     {
-      Serial.println(F("Er.CAN"));
+      Serial.print(F("Er.CAN (intento "));
+      Serial.print(can_init_attempts + 1);
+      Serial.println(F("/10)"));
+      delay(100);
+      can_init_attempts++;
     }
-    Serial.println(F("CAN OK"));
+    
+    if (CAN.error == 1) {
+      Serial.println(F("⚠️  WARNING: CAN no inicializado después de 10 intentos"));
+      Serial.println(F("Sistema continuará sin CAN"));
+    } else {
+      Serial.println(F("CAN OK"));
+    }
     bool okk = false;
     readVoltages2(okk);
     checkFails(okk);
@@ -294,10 +311,18 @@ void setup()
     CAN.setPacketTimer(10,1000);
     CAN.setPacketTimer(11,1000);
     CAN.setPacketTimer(14,200);
+    
+    // Configuración de Watchdog para detectar bucles infinitos
+    esp_task_wdt_init(10, true);  // Timeout 10 segundos, panic on timeout
+    esp_task_wdt_add(NULL);       // Añadir task actual al watchdog
+    Serial.println(F("Watchdog activado (10s)"));
 }
 
 void loop()
 {
+  // Reset watchdog al inicio de cada ciclo
+  esp_task_wdt_reset();
+  
   unsigned long int tTotal = millis();
   static bool cmdCharge = false;
   static bool stsCommOK = false;
@@ -375,7 +400,7 @@ void loop()
   bool aux_minus = (aux_idx == 2 || aux_idx == 3);
 
   // ============================================================
-  // LÓGICA TSON / PRECARGA / AIRs / COHERENCIA (VERSIÓN CORREGIDA)
+  // LÓGICA TSON / PRECARGA / AIRs / COHERENCIA 
   // ============================================================
 
   // --- TSON ---
@@ -426,7 +451,7 @@ void loop()
   }
 
   // ============================================================
-  // CÁLCULO DE COMANDOS AIRs (CORREGIDO)
+  // CÁLCULO DE COMANDOS AIRs 
   // ============================================================
 
   bool air_plus_cmd = false;
@@ -440,7 +465,7 @@ void loop()
   }
 
   // ============================================================
-  // COHERENCIA AIRs (CORREGIDO)
+  // COHERENCIA AIRs 
   // ============================================================
 
   air_coherence_error = false;
@@ -455,15 +480,22 @@ void loop()
   // VERIFICACIÓN INICIAL 
   // ============================================================
 
+  // Solo marcar como completada si:
+  // 1. No hay timeout de precarga
+  // 2. No hay error de coherencia
+  // 3. Los AIRs están ABIERTOS (estado seguro inicial)
   if (!initial_check_done &&
       !precharge_timeout_error &&
-      !air_coherence_error)
+      !air_coherence_error &&
+      !aux_plus &&   // Verificar que AIR+ esté abierto
+      !aux_minus)    // Verificar que AIR- esté abierto
   {
       initial_check_done = true;
+      Serial.println("✅ Verificación inicial completada - AIRs abiertos correctamente");
   }
 
   // ============================================================
-  // CAPA DE SEGURIDAD (CORREGIDA)
+  // CAPA DE SEGURIDAD 
   // ============================================================
 
   bool newSafetyFail = false;
@@ -479,6 +511,13 @@ void loop()
   // ============================================================
   // APLICAR COMANDOS A HARDWARE
   // ============================================================
+
+  // VERIFICACIÓN DE SEGURIDAD: NO cerrar AIR+ si AIR- no está cerrado
+  if (air_plus_cmd && !aux_minus) {
+      Serial.println("🔴 SEGURIDAD: Intento de cerrar AIR+ sin AIR- cerrado");
+      air_plus_cmd = false;
+      air_coherence_error = true;
+  }
 
   digitalWrite(PIN_AIR_PLUS_CTRL,  air_plus_cmd  ? LOW : HIGH);
   digitalWrite(PIN_AIR_MINUS_CTRL, air_minus_cmd ? LOW : HIGH);
@@ -698,7 +737,7 @@ void loop()
   array3[1]=(int16_t)(maxVolt*1000);
   array3[2]=(int16_t)(minVolt*1000);
   array3[3]=(int16_t)minTemp;
-  CAN.setPacket(11,array2,4);
+  CAN.setPacket(11,array3,4);
 
   //** CAN SEND */
   CAN.send();
