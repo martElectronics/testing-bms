@@ -194,6 +194,8 @@ void printExclusionLists();
 
 void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9]);
 
+void sendBatteryInfoCan(float stsVoltCells[12][11], float stsTempCells[12][9], uint32_t baseIDVolt, uint32_t baseIDTemp);
+
 void mostrarEstadoBMS(bool sdc_end,
                       bool precharge_done,
                       bool tson_armed,
@@ -982,6 +984,10 @@ void procesarComandoSerial(float &valorFloatRef, bool &valorBoolRef, bool &reset
 
       case 'e':
         imprimirDatosCSV(stsVoltCells, stsTempCells);
+        break;
+
+      case 't':
+        sendBatteryInfoCan(stsVoltCells, stsTempCells, 1168, 1205);
         break;
       
       // Debug/Unused commands kept for compatibility
@@ -1847,3 +1853,48 @@ void imprimirDatosCSV(float stsVoltCells[12][11], float stsTempCells[12][9])
     Serial.println();
   }
 }
+
+/**
+ * @brief Envía por CAN string con los datos de voltaje y temperatura de la batería.
+ * 
+ * @param stsVoltCells Array de 12x11 con los datos de voltaje.
+ * @param stsTempCells Array de 12x9 con los datos de temperatura.
+ * @param baseIDVolt ID inicial para los voltajes (ej. 0x100)
+ * @param baseIDTemp ID inicial para las temperaturas (ej. 0x200)
+ */
+void sendBatteryInfoCan(float stsVoltCells[12][11], float stsTempCells[12][9], uint32_t baseIDVolt, uint32_t baseIDTemp) {
+  
+  for (int i = 0; i < 12; i++) {
+    uint32_t moduloID = i + 1;
+
+    // --- 1. ENVIAR VOLTAJES ---
+    for (int vIdx = 0; vIdx < 11; vIdx += 4) {
+      // El ID se construye sumando la base + el desplazamiento del módulo
+      uint32_t canID = baseIDVolt + (moduloID << 4) + (vIdx / 4);
+      uint16_t buffer[4] = {0, 0, 0, 0};
+
+      for (int k = 0; k < 4; k++) {
+        if (vIdx + k < 11) {
+          buffer[k] = (uint16_t)(stsVoltCells[i][vIdx + k] * 1000);
+        }
+      }
+      CAN.setPacket(canID, (byte*)buffer, 8);
+      CAN.send();
+    }
+
+    // --- 2. ENVIAR TEMPERATURAS ---
+    for (int tIdx = 0; tIdx < 9; tIdx += 4) {
+      uint32_t canID = baseIDTemp + (moduloID << 4) + (tIdx / 4);
+      uint16_t buffer[4] = {0, 0, 0, 0};
+
+      for (int k = 0; k < 4; k++) {
+        if (tIdx + k < 9) {
+          buffer[k] = (uint16_t)(stsTempCells[i][tIdx + k] * 100);
+        }
+      }
+      CAN.setPacket(canID, (byte*)buffer, 8);
+      CAN.send();
+    }
+  }
+}
+
